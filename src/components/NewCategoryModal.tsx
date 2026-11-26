@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X } from 'lucide-react';
+import { Sparkles, X } from 'lucide-react';
 import { CategoryRack, SPINE_PALETTE } from '../types/library';
+import { pickHarmoniousColor } from '../lib/autoColor';
 
 interface NewCategoryModalProps {
   nextOrder: number;
@@ -18,11 +19,16 @@ export const NewCategoryModal: React.FC<NewCategoryModalProps> = ({
 }) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [colorMode, setColorMode] = useState<'auto' | 'manual'>('auto');
   const [accentColor, setAccentColor] = useState(
     parentCategory ? SPINE_PALETTE[0].color : '#C86D51'
   );
 
   const isBinder = Boolean(parentCategory);
+  const resolvedColor =
+    isBinder && colorMode === 'auto'
+      ? pickHarmoniousColor(name || 'binder').color
+      : accentColor;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +38,7 @@ export const NewCategoryModal: React.FC<NewCategoryModalProps> = ({
       parentId: parentCategory ? parentCategory.id : null,
       name: name.trim(),
       description: description.trim(),
-      accentColor,
+      accentColor: resolvedColor,
       sortOrder: nextOrder,
       createdAt: new Date().toISOString(),
     });
@@ -110,20 +116,44 @@ export const NewCategoryModal: React.FC<NewCategoryModalProps> = ({
               <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#5A5148', marginBottom: 10 }}>
                 BINDER LINEN COLOR
               </label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setColorMode('auto')}
+                  style={{
+                    height: 30,
+                    padding: '0 12px',
+                    borderRadius: 999,
+                    border:
+                      colorMode === 'auto' ? '2px solid #C86D51' : '1px solid #D5CAB8',
+                    background: colorMode === 'auto' ? '#2C2621' : '#F2ECE2',
+                    color: colorMode === 'auto' ? '#FAF7F2' : '#5A5148',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                  }}
+                >
+                  <Sparkles size={12} />
+                  <span>Auto</span>
+                </button>
                 {SPINE_PALETTE.slice(0, 8).map((opt) => (
                   <button
                     type="button"
                     key={opt.name}
                     title={opt.name}
-                    onClick={() => setAccentColor(opt.color)}
+                    onClick={() => {
+                      setColorMode('manual');
+                      setAccentColor(opt.color);
+                    }}
                     style={{
                       width: 30,
                       height: 30,
                       borderRadius: '50%',
                       background: opt.color,
                       border:
-                        accentColor === opt.color
+                        colorMode === 'manual' && accentColor === opt.color
                           ? '3px solid #C86D51'
                           : '1px solid rgba(44,38,33,0.18)',
                       padding: 0,

@@ -1,7 +1,8 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { CheckCircle2, UploadCloud, X } from 'lucide-react';
+import { CheckCircle2, Sparkles, UploadCloud, X } from 'lucide-react';
 import { BookFormat, BookItem, CategoryRack, SPINE_PALETTE } from '../types/library';
+import { AutoColorResult, detectAutoBookColor, pickHarmoniousColor } from '../lib/autoColor';
 
 interface UploadBookModalProps {
   categories: CategoryRack[];
@@ -23,14 +24,34 @@ export const UploadBookModal: React.FC<UploadBookModalProps> = ({
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [categoryId, setCategoryId] = useState(defaultCategoryId || categories[0]?.id || '');
+  const [colorMode, setColorMode] = useState<'auto' | 'manual'>('auto');
   const [selectedPaletteIdx, setSelectedPaletteIdx] = useState(0);
+  const [autoColor, setAutoColor] = useState<AutoColorResult>(() => pickHarmoniousColor('new-book'));
   const [spineThickness, setSpineThickness] = useState(60);
   const [spineHeight, setSpineHeight] = useState(230);
   const [saving, setSaving] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const palette = SPINE_PALETTE[selectedPaletteIdx];
+  useEffect(() => {
+    if (colorMode !== 'auto') return;
+    if (file) {
+      let active = true;
+      detectAutoBookColor(file, title).then((res) => {
+        if (active) setAutoColor(res);
+      });
+      return () => {
+        active = false;
+      };
+    } else if (title.trim()) {
+      setAutoColor(pickHarmoniousColor(title));
+    }
+  }, [colorMode, file, title]);
+
+  const manualPalette = SPINE_PALETTE[selectedPaletteIdx];
+  const activeColor = colorMode === 'auto' ? autoColor.color : manualPalette.color;
+  const activeTextColor = colorMode === 'auto' ? autoColor.textColor : manualPalette.textColor;
+  const activeFinishLabel = colorMode === 'auto' ? autoColor.label : manualPalette.finish;
 
   const handleFilePick = (picked: File) => {
     const lower = picked.name.toLowerCase();
@@ -72,8 +93,8 @@ export const UploadBookModal: React.FC<UploadBookModalProps> = ({
         fileName: file.name,
         fileSizeBytes: file.size,
         pageCount: 0,
-        spineColor: palette.color,
-        spineTextColor: palette.textColor,
+        spineColor: activeColor,
+        spineTextColor: activeTextColor,
         spineHeight,
         spineThickness,
         tiltDeg: 0,
@@ -264,20 +285,48 @@ export const UploadBookModal: React.FC<UploadBookModalProps> = ({
                 <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#5A5148', marginBottom: 10, letterSpacing: '0.06em' }}>
                   3D SPINE COLOR &amp; FINISH
                 </label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() => setColorMode('auto')}
+                    title="Automatically pick color from PDF cover or book title"
+                    style={{
+                      height: 32,
+                      padding: '0 12px',
+                      borderRadius: 999,
+                      border:
+                        colorMode === 'auto'
+                          ? '2px solid #C86D51'
+                          : '1px solid #D5CAB8',
+                      background: colorMode === 'auto' ? '#2C2621' : '#F2ECE2',
+                      color: colorMode === 'auto' ? '#FAF7F2' : '#5A5148',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                    }}
+                  >
+                    <Sparkles size={13} />
+                    <span>Auto</span>
+                  </button>
+
                   {SPINE_PALETTE.map((opt, i) => (
                     <button
                       type="button"
                       key={opt.name}
                       title={opt.name}
-                      onClick={() => setSelectedPaletteIdx(i)}
+                      onClick={() => {
+                        setColorMode('manual');
+                        setSelectedPaletteIdx(i);
+                      }}
                       style={{
                         width: 32,
                         height: 32,
                         borderRadius: '50%',
                         background: opt.color,
                         border:
-                          selectedPaletteIdx === i
+                          colorMode === 'manual' && selectedPaletteIdx === i
                             ? '3px solid #C86D51'
                             : '1px solid rgba(44,38,33,0.18)',
                         padding: 0,
@@ -355,8 +404,8 @@ export const UploadBookModal: React.FC<UploadBookModalProps> = ({
                   style={{
                     width: spineThickness,
                     height: spineHeight,
-                    background: palette.color,
-                    color: palette.textColor,
+                    background: activeColor,
+                    color: activeTextColor,
                     boxShadow: '-12px 16px 24px rgba(44, 38, 33, 0.24)',
                     transition: 'all 0.25s ease',
                   }}
@@ -370,7 +419,7 @@ export const UploadBookModal: React.FC<UploadBookModalProps> = ({
               </div>
 
               <div style={{ fontSize: 12, color: '#7A6F64' }}>
-                {palette.finish} &bull; {spineThickness}px Spine
+                {activeFinishLabel} &bull; {spineThickness}px Spine
               </div>
             </div>
           </div>
