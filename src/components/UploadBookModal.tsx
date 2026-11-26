@@ -148,14 +148,7 @@ export const UploadBookModal: React.FC<UploadBookModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1.45fr 1fr',
-              gap: 32,
-              padding: '28px 36px',
-            }}
-          >
+          <div className="upload-modal-grid">
             {/* Left Column: File + Metadata + Color Picker */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               <div

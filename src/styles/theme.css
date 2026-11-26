@@ -823,18 +823,111 @@ button {
   border-color: var(--accent-terracotta);
 }
 
+.reader-spread-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 640px;
+  position: relative;
+}
+
+.reader-center-crease {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 44px;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, transparent 0%, rgba(44, 38, 33, 0.1) 50%, transparent 100%);
+  pointer-events: none;
+}
+
+.upload-modal-grid {
+  display: grid;
+  grid-template-columns: 1.45fr 1fr;
+  gap: 32px;
+  padding: 28px 36px;
+}
+
 @media (max-width: 900px) {
   .zen-header {
-    padding: 0 20px;
+    padding: 0 18px;
+    height: 64px;
+    gap: 10px;
   }
-  .zen-stage {
-    padding: 24px 20px 64px;
+  .zen-brand-name {
+    font-size: 21px;
   }
   .zen-search-wrap {
     display: none;
   }
+  .zen-sync-pill span:last-child {
+    display: none;
+  }
+  .zen-sync-pill {
+    padding: 0 10px;
+  }
+  .zen-btn-primary {
+    height: 36px;
+    padding: 0 14px;
+    font-size: 12px;
+  }
+  .zen-stage {
+    padding: 24px 16px 64px;
+  }
+  .zen-hero-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .zen-hero-title {
+    font-size: 32px;
+  }
+  .rack-grid {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .shelf-title {
+    font-size: 26px;
+  }
   .shelf-books-row {
     overflow-x: auto;
-    padding: 40px 20px 0;
+    -webkit-overflow-scrolling: touch;
+    padding: 36px 16px 0;
+    min-height: 248px;
+  }
+  .hover-preview-card {
+    display: none;
+  }
+  .reader-topbar {
+    padding: 0 12px;
+    height: 58px;
+    gap: 8px;
+  }
+  .reader-canvas-area {
+    padding: 12px 10px 80px;
+  }
+  .reader-spread-grid {
+    grid-template-columns: 1fr;
+  }
+  .reader-center-crease {
+    display: none;
+  }
+  .reader-scrubber {
+    width: calc(100vw - 24px);
+    max-width: 420px;
+    padding: 0 14px;
+    gap: 10px;
+    justify-content: space-between;
+  }
+  .modal-card {
+    max-height: 92vh;
+    overflow-y: auto;
+    border-radius: 20px;
+  }
+  .upload-modal-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    padding: 20px;
   }
 }

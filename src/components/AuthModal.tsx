@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Cloud, LogOut, X } from 'lucide-react';
+import { Cloud, LogOut, RefreshCw, X } from 'lucide-react';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { syncLocalToCloud } from '../lib/storage';
 
 interface AuthModalProps {
   cloudUserEmail: string | null;
@@ -18,7 +19,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [password, setPassword] = useState('');
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [message, setMessage] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,6 +39,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     } else {
       onAuthSuccess();
       onClose();
+    }
+  };
+
+  const handleManualSync = async () => {
+    setSyncing(true);
+    setSyncStatus(null);
+    const res = await syncLocalToCloud();
+    setSyncing(false);
+    if (res.error) {
+      setSyncStatus(`Sync warning: ${res.error}`);
+    } else {
+      setSyncStatus(`Synced ${res.syncedCategories} racks/binders & ${res.syncedBooks} books to cloud!`);
+      onAuthSuccess();
     }
   };
 
@@ -97,14 +113,44 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </ol>
             </div>
           ) : cloudUserEmail ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <p style={{ margin: 0, fontSize: 14, color: '#2B463C' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <p style={{ margin: 0, fontSize: 14, color: '#2B463C', lineHeight: 1.5 }}>
                 Signed in &amp; syncing privately as <strong>{cloudUserEmail}</strong>.
               </p>
-              <button className="zen-btn-secondary" onClick={handleSignOut}>
-                <LogOut size={15} />
-                <span>Sign Out</span>
-              </button>
+              <p style={{ margin: 0, fontSize: 13, color: '#7A6F64', lineHeight: 1.5 }}>
+                If you added books on this device before signing in, press{' '}
+                <strong>Push Local Books to Cloud</strong> so they appear on your phone too.
+              </p>
+
+              {syncStatus && (
+                <div
+                  style={{
+                    fontSize: 13,
+                    padding: '10px 14px',
+                    borderRadius: 10,
+                    background: syncStatus.startsWith('Sync warning') ? '#FDF4F2' : '#EEF5F1',
+                    color: syncStatus.startsWith('Sync warning') ? '#9E332C' : '#2B463C',
+                    fontWeight: 600,
+                  }}
+                >
+                  {syncStatus}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                <button
+                  className="zen-btn-primary"
+                  onClick={handleManualSync}
+                  disabled={syncing}
+                >
+                  <RefreshCw size={14} />
+                  <span>{syncing ? 'Syncing...' : 'Push Local Books to Cloud'}</span>
+                </button>
+                <button className="zen-btn-secondary" onClick={handleSignOut}>
+                  <LogOut size={15} />
+                  <span>Sign Out</span>
+                </button>
+              </div>
             </div>
           ) : (
             <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

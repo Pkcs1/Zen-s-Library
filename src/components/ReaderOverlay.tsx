@@ -315,28 +315,9 @@ export const ReaderOverlay: React.FC<ReaderOverlayProps> = ({
             />
           ) : (
             /* Editorial Two-Page Open Book Spread for Preloaded Sample Books */
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                minHeight: 640,
-                position: 'relative',
-              }}
-            >
+            <div className="reader-spread-grid">
               {/* Center Book Binding Crease */}
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  bottom: 0,
-                  left: '50%',
-                  width: 44,
-                  transform: 'translateX(-50%)',
-                  background:
-                    'linear-gradient(90deg, transparent 0%, rgba(44,38,33,0.1) 50%, transparent 100%)',
-                  pointerEvents: 'none',
-                }}
-              />
+              <div className="reader-center-crease" />
 
               {/* Left Page */}
               <div style={{ padding: '44px 56px 56px' }}>
