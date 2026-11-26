@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Plus } from 'lucide-react';
+import { Plus, RotateCcw } from 'lucide-react';
 import { BookItem, CategoryRack } from '../types/library';
 
 interface CategoryRackGridProps {
@@ -8,6 +8,7 @@ interface CategoryRackGridProps {
   books: BookItem[];
   onSelectCategory: (category: CategoryRack, originRect: DOMRect) => void;
   onNewCategoryClick: () => void;
+  onResetClick: () => void;
 }
 
 export const CategoryRackGrid: React.FC<CategoryRackGridProps> = ({
@@ -15,6 +16,7 @@ export const CategoryRackGrid: React.FC<CategoryRackGridProps> = ({
   books,
   onSelectCategory,
   onNewCategoryClick,
+  onResetClick,
 }) => {
   const totalBooks = books.length;
 
@@ -36,13 +38,52 @@ export const CategoryRackGrid: React.FC<CategoryRackGridProps> = ({
           </p>
         </div>
 
-        <button className="zen-btn-secondary" onClick={onNewCategoryClick}>
-          <Plus size={15} />
-          <span>New Category</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            className="zen-btn-secondary"
+            onClick={onResetClick}
+            title="Clear all racks and books, or restore sample library"
+          >
+            <RotateCcw size={14} />
+            <span>Reset / Clear</span>
+          </button>
+          <button className="zen-btn-secondary" onClick={onNewCategoryClick}>
+            <Plus size={15} />
+            <span>New Category</span>
+          </button>
+        </div>
       </div>
 
-      <div className="rack-grid">
+      {categories.length === 0 ? (
+        <div
+          style={{
+            padding: '80px 28px',
+            textAlign: 'center',
+            borderRadius: 24,
+            background: '#F4EFE6',
+            border: '1.5px dashed #D5CAB8',
+          }}
+        >
+          <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: 32, margin: '0 0 10px' }}>
+            Your reading room is empty
+          </h2>
+          <p style={{ fontSize: 15, color: '#7A6F64', margin: '0 0 24px' }}>
+            Create your first category rack to start shelving your PDFs and EPUBs, or restore the
+            sample library.
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
+            <button className="zen-btn-primary" onClick={onNewCategoryClick}>
+              <Plus size={16} />
+              <span>Create First Rack</span>
+            </button>
+            <button className="zen-btn-secondary" onClick={onResetClick}>
+              <RotateCcw size={14} />
+              <span>Restore Sample Library</span>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="rack-grid">
         {categories.map((cat, idx) => {
           const catBooks = books.filter((b) => b.categoryId === cat.id);
           const previewSpines = catBooks.slice(0, 6);
@@ -99,7 +140,8 @@ export const CategoryRackGrid: React.FC<CategoryRackGridProps> = ({
             </motion.button>
           );
         })}
-      </div>
+        </div>
+      )}
     </motion.section>
   );
 };

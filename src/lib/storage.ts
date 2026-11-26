@@ -108,17 +108,63 @@ export async function loadLibraryState(): Promise<{
   let books = await db.getAll('books');
   const bookmarks = await db.getAll('bookmarks');
 
-  if (categories.length === 0) {
+  const hasInitialized = localStorage.getItem('zens-library-initialized') === 'true';
+
+  if (categories.length === 0 && !hasInitialized) {
     const tx = db.transaction(['categories', 'books'], 'readwrite');
     for (const c of SEED_CATEGORIES) await tx.objectStore('categories').put(c);
     for (const b of SEED_BOOKS) await tx.objectStore('books').put(b);
     await tx.done;
+    localStorage.setItem('zens-library-initialized', 'true');
     categories = SEED_CATEGORIES;
     books = SEED_BOOKS;
   }
 
   categories.sort((a, b) => a.sortOrder - b.sortOrder);
   return { categories, books, bookmarks, cloudUserEmail };
+}
+
+export async function clearAllLibraryData(): Promise<void> {
+  const db = await getDb();
+  const existingBooks = await db.getAll('books');
+
+  const tx = db.transaction(['categories', 'books', 'files', 'bookmarks'], 'readwrite');
+  await Promise.all([
+    tx.objectStore('categories').clear(),
+    tx.objectStore('books').clear(),
+    tx.objectStore('files').clear(),
+    tx.objectStore('bookmarks').clear(),
+  ]);
+  await tx.done;
+  localStorage.setItem('zens-library-initialized', 'true');
+
+  if (supabase && isSupabaseConfigured) {
+    const { data } = await supabase.auth.getUser();
+    if (data.user) {
+      const filePaths = existingBooks
+        .map((b) => b.filePath)
+        .filter((p): p is string => Boolean(p));
+      if (filePaths.length > 0) {
+        await supabase.storage.from('books').remove(filePaths);
+      }
+      await supabase.from('bookmarks').delete().eq('user_id', data.user.id);
+      await supabase.from('books').delete().eq('user_id', data.user.id);
+      await supabase.from('categories').delete().eq('user_id', data.user.id);
+    }
+  }
+}
+
+export async function restoreSampleLibrary(): Promise<{
+  categories: CategoryRack[];
+  books: BookItem[];
+}> {
+  await clearAllLibraryData();
+  const db = await getDb();
+  const tx = db.transaction(['categories', 'books'], 'readwrite');
+  for (const c of SEED_CATEGORIES) await tx.objectStore('categories').put(c);
+  for (const b of SEED_BOOKS) await tx.objectStore('books').put(b);
+  await tx.done;
+  return { categories: SEED_CATEGORIES, books: SEED_BOOKS };
 }
 
 export async function saveCategory(category: CategoryRack): Promise<void> {

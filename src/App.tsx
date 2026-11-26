@@ -2,8 +2,10 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { BookItem, BookmarkItem, CategoryRack } from './types/library';
 import {
+  clearAllLibraryData,
   deleteBook,
   loadLibraryState,
+  restoreSampleLibrary,
   saveBookWithFile,
   saveCategory,
   toggleBookmark,
@@ -17,6 +19,7 @@ import { ReaderOverlay } from './components/ReaderOverlay';
 import { UploadBookModal } from './components/UploadBookModal';
 import { NewCategoryModal } from './components/NewCategoryModal';
 import { AuthModal } from './components/AuthModal';
+import { ResetLibraryModal } from './components/ResetLibraryModal';
 
 export const App: React.FC = () => {
   const [categories, setCategories] = useState<CategoryRack[]>([]);
@@ -33,6 +36,7 @@ export const App: React.FC = () => {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
 
   const refreshLibrary = useCallback(async () => {
     const state = await loadLibraryState();
@@ -131,6 +135,24 @@ export const App: React.FC = () => {
     setActiveBook(null);
   };
 
+  const handleClearAll = async () => {
+    await clearAllLibraryData();
+    setCategories([]);
+    setBooks([]);
+    setBookmarks([]);
+    setSelectedCategoryId(null);
+    setActiveBook(null);
+  };
+
+  const handleRestoreSamples = async () => {
+    const restored = await restoreSampleLibrary();
+    setCategories(restored.categories);
+    setBooks(restored.books);
+    setBookmarks([]);
+    setSelectedCategoryId(null);
+    setActiveBook(null);
+  };
+
   return (
     <div>
       <Header
@@ -156,6 +178,7 @@ export const App: React.FC = () => {
               books={filteredBooks}
               onSelectCategory={handleSelectCategory}
               onNewCategoryClick={() => setShowCategoryModal(true)}
+              onResetClick={() => setShowResetModal(true)}
             />
           ) : (
             <Bookshelf3D
@@ -213,6 +236,19 @@ export const App: React.FC = () => {
             cloudUserEmail={cloudUserEmail}
             onClose={() => setShowAuthModal(false)}
             onAuthSuccess={refreshLibrary}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showResetModal && (
+          <ResetLibraryModal
+            rackCount={categories.length}
+            bookCount={books.length}
+            isCloudSynced={Boolean(cloudUserEmail)}
+            onClose={() => setShowResetModal(false)}
+            onClearAll={handleClearAll}
+            onRestoreSamples={handleRestoreSamples}
           />
         )}
       </AnimatePresence>
