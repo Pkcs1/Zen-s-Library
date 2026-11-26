@@ -136,7 +136,7 @@ export const BookSpine3D: React.FC<BookSpine3DProps> = ({
           <span className="book-spine-title">{book.title}</span>
         </div>
 
-        {/* Exposed Cream Page Block & Front Cover Edge (visible when pulled halfway out) */}
+        {/* Exposed Cream Page Block + Outer Hardcover Board (same 3D plane — zero clipping) */}
         <motion.div
           className="book-pages-side"
           animate={{
@@ -144,15 +144,12 @@ export const BookSpine3D: React.FC<BookSpine3DProps> = ({
             scaleX: isHovered || isOpening ? 1 : 0.2,
           }}
           transition={{ duration: 0.22 }}
-        />
-        <motion.div
-          className="book-cover-lip"
-          style={{ background: book.spineColor }}
-          animate={{
-            opacity: isHovered || isOpening ? 1 : 0,
-          }}
-          transition={{ duration: 0.22 }}
-        />
+        >
+          <div
+            className="book-cover-lip"
+            style={{ background: book.spineColor }}
+          />
+        </motion.div>
       </motion.div>
 
       {/* Floating Metadata Preview Card */}

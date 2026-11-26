@@ -481,13 +481,13 @@ button {
   z-index: 2;
 }
 
-/* Exposed 3D Cream Page Block + Front Cover Edge */
+/* Exposed 3D Cream Page Block + Outer Hardcover Board */
 .book-pages-side {
   position: absolute;
   top: 4px;
   bottom: 4px;
   left: 100%;
-  width: 36px;
+  width: 34px;
   background: repeating-linear-gradient(
     90deg,
     #faf5ea 0px,
@@ -496,21 +496,21 @@ button {
   );
   border-top: 1px solid #d7cbb6;
   border-bottom: 1px solid #d7cbb6;
-  border-right: 4px solid rgba(0, 0, 0, 0.14);
-  border-radius: 0 3px 3px 0;
+  border-radius: 0 2px 2px 0;
   transform-origin: left center;
-  transform: rotateY(72deg);
+  transform: rotateY(68deg);
   pointer-events: none;
 }
 
 .book-cover-lip {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: calc(100% + 12px);
+  top: -4px;
+  bottom: -4px;
+  right: -7px;
   width: 8px;
-  border-radius: 0 5px 5px 0;
-  filter: brightness(0.92);
+  border-radius: 0 4px 4px 0;
+  filter: brightness(0.88);
+  box-shadow: 2px 0 6px rgba(44, 38, 33, 0.18);
   pointer-events: none;
 }
 
