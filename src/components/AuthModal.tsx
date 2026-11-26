@@ -49,6 +49,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setSyncing(false);
     if (res.error) {
       setSyncStatus(`Sync warning: ${res.error}`);
+    } else if (res.syncedBooks === 0 && res.syncedCategories === 0 && res.skippedBooks > 0) {
+      setSyncStatus(`All ${res.skippedBooks} book(s) are already synced to the cloud!`);
+      onAuthSuccess();
+    } else if (res.skippedBooks > 0) {
+      setSyncStatus(
+        `Synced ${res.syncedBooks} new book(s) (${res.skippedBooks} already synced skipped)!`
+      );
+      onAuthSuccess();
     } else {
       setSyncStatus(`Synced ${res.syncedCategories} racks/binders & ${res.syncedBooks} books to cloud!`);
       onAuthSuccess();

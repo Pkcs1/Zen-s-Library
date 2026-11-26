@@ -174,14 +174,20 @@ export async function syncLocalToCloud(
 ): Promise<{
   syncedCategories: number;
   syncedBooks: number;
+  skippedBooks: number;
   error: string | null;
 }> {
   if (!supabase || !isSupabaseConfigured) {
-    return { syncedCategories: 0, syncedBooks: 0, error: 'Supabase is not configured.' };
+    return {
+      syncedCategories: 0,
+      syncedBooks: 0,
+      skippedBooks: 0,
+      error: 'Supabase is not configured.',
+    };
   }
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) {
-    return { syncedCategories: 0, syncedBooks: 0, error: 'Not signed in.' };
+    return { syncedCategories: 0, syncedBooks: 0, skippedBooks: 0, error: 'Not signed in.' };
   }
   const userId = userData.user.id;
   const db = await getDb();
@@ -190,6 +196,16 @@ export async function syncLocalToCloud(
   const localBooks = await db.getAll('books');
   const localFiles = await db.getAll('files');
   const fileMap = new Map(localFiles.map((f) => [f.id, f.blob]));
+
+  onProgress?.('Checking cloud library...');
+  const [{ data: existingCloudCats }, { data: existingCloudBooks }] = await Promise.all([
+    supabase.from('categories').select('id'),
+    supabase.from('books').select('id, file_path'),
+  ]);
+  const cloudCatIds = new Set((existingCloudCats ?? []).map((c) => c.id as string));
+  const cloudBookMap = new Map(
+    (existingCloudBooks ?? []).map((b) => [b.id as string, b.file_path as string | null])
+  );
 
   // Map any non-UUID legacy seed IDs to valid UUIDs so Supabase accepts them
   const catIdMap = new Map<string, string>();
@@ -207,18 +223,40 @@ export async function syncLocalToCloud(
   migratedCats.sort((a, b) => (a.parentId ? 1 : 0) - (b.parentId ? 1 : 0));
 
   let firstError: string | null = null;
+  let syncedCategories = 0;
   for (const c of migratedCats) {
+    if (cloudCatIds.has(c.id)) continue;
     const err = await upsertCategoryToCloud(userId, c);
-    if (err && !firstError) firstError = err;
+    if (err) {
+      if (!firstError) firstError = err;
+    } else {
+      syncedCategories++;
+    }
   }
 
   const migratedBooks: BookItem[] = [];
+  let syncedBooks = 0;
+  let skippedBooks = 0;
+
   for (const b of localBooks) {
     const newBookId = isUuid(b.id) ? b.id : crypto.randomUUID();
     const newCatId = catIdMap.get(b.categoryId) ?? b.categoryId;
     if (!isUuid(newCatId)) continue;
 
     const blob = fileMap.get(b.id);
+    const existingCloudPath = cloudBookMap.get(newBookId);
+    const alreadySynced =
+      isUuid(b.id) && Boolean(existingCloudPath) && (Boolean(b.filePath) || !blob);
+
+    if (alreadySynced) {
+      skippedBooks++;
+      migratedBooks.push({
+        ...b,
+        filePath: b.filePath ?? existingCloudPath ?? undefined,
+      });
+      continue;
+    }
+
     let storagePath = b.filePath ?? `${userId}/${newBookId}.${b.format}`;
     let uploadFailed = false;
     if (blob) {
@@ -277,39 +315,52 @@ export async function syncLocalToCloud(
         progress_percent: updatedBook.progressPercent,
         last_read_at: updatedBook.lastReadAt ?? null,
       });
-      if (bookErr && !firstError) firstError = bookErr.message;
+      if (bookErr) {
+        if (!firstError) firstError = bookErr.message;
+      } else {
+        syncedBooks++;
+      }
     }
     migratedBooks.push(updatedBook);
   }
 
-  // Update local IndexedDB with migrated UUIDs so future edits match cloud IDs
-  const tx = db.transaction(['categories', 'books', 'files'], 'readwrite');
-  await tx.objectStore('categories').clear();
-  await tx.objectStore('books').clear();
-  for (const c of migratedCats) await tx.objectStore('categories').put(c);
-  for (const b of migratedBooks) {
-    await tx.objectStore('books').put(b);
-  }
-  // Re-key blobs if book ID changed
-  for (const oldBook of localBooks) {
-    const blob = fileMap.get(oldBook.id);
-    const matched = migratedBooks.find(
-      (mb) => mb.fileName === oldBook.fileName && mb.title === oldBook.title
-    );
-    if (blob && matched && matched.id !== oldBook.id) {
-      await tx.objectStore('files').put({
-        id: matched.id,
-        blob,
-        updatedAt: new Date().toISOString(),
-      });
-      await tx.objectStore('files').delete(oldBook.id);
+  const needsLocalRewrite =
+    syncedCategories > 0 ||
+    syncedBooks > 0 ||
+    localCats.some((c) => !isUuid(c.id)) ||
+    localBooks.some((b) => !isUuid(b.id));
+
+  if (needsLocalRewrite) {
+    // Update local IndexedDB with migrated UUIDs so future edits match cloud IDs
+    const tx = db.transaction(['categories', 'books', 'files'], 'readwrite');
+    await tx.objectStore('categories').clear();
+    await tx.objectStore('books').clear();
+    for (const c of migratedCats) await tx.objectStore('categories').put(c);
+    for (const b of migratedBooks) {
+      await tx.objectStore('books').put(b);
     }
+    // Re-key blobs if book ID changed
+    for (const oldBook of localBooks) {
+      const blob = fileMap.get(oldBook.id);
+      const matched = migratedBooks.find(
+        (mb) => mb.fileName === oldBook.fileName && mb.title === oldBook.title
+      );
+      if (blob && matched && matched.id !== oldBook.id) {
+        await tx.objectStore('files').put({
+          id: matched.id,
+          blob,
+          updatedAt: new Date().toISOString(),
+        });
+        await tx.objectStore('files').delete(oldBook.id);
+      }
+    }
+    await tx.done;
   }
-  await tx.done;
 
   return {
-    syncedCategories: migratedCats.length,
-    syncedBooks: migratedBooks.length,
+    syncedCategories,
+    syncedBooks,
+    skippedBooks,
     error: firstError,
   };
 }
