@@ -2,10 +2,11 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { BookItem, BookmarkItem, CategoryRack } from './types/library';
 import {
+  BatchSaveResult,
   deleteBook,
   deleteCategoriesAndBooks,
   loadLibraryState,
-  saveBookWithFile,
+  saveBooksWithFiles,
   saveCategory,
   toggleBookmark,
   updateBookProgress,
@@ -105,10 +106,27 @@ export const App: React.FC = () => {
     setSelectedCategoryId(cat.id);
   };
 
-  const handleSaveBook = async (book: BookItem, file: File) => {
-    const saved = await saveBookWithFile(book, file);
-    setBooks((prev) => [...prev, saved]);
-    setSelectedCategoryId(saved.categoryId);
+  const handleSaveBooks = async (
+    entries: Array<{ book: BookItem; file: File }>,
+    onProgress?: (
+      completed: number,
+      total: number,
+      chunkProgress?: { uploaded: number; total: number }
+    ) => void
+  ): Promise<BatchSaveResult> => {
+    const result = await saveBooksWithFiles(entries, onProgress);
+    if (result.saved.length > 0) {
+      setBooks((prev) => [...prev, ...result.saved]);
+      if (Object.keys(result.categoryRemap).length > 0) {
+        setCategories((prev) =>
+          prev.map((c) =>
+            result.categoryRemap[c.id] ? { ...c, id: result.categoryRemap[c.id] } : c
+          )
+        );
+      }
+      setSelectedCategoryId(result.saved[result.saved.length - 1].categoryId);
+    }
+    return result;
   };
 
   const handleCreateCategory = async (category: CategoryRack) => {
@@ -247,7 +265,7 @@ export const App: React.FC = () => {
             defaultCategoryId={selectedCategoryId || categories[0]?.id || ''}
             isCloudSynced={Boolean(cloudUserEmail)}
             onClose={() => setShowUploadModal(false)}
-            onSaveBook={handleSaveBook}
+            onSaveBooks={handleSaveBooks}
           />
         )}
       </AnimatePresence>

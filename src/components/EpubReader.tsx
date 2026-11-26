@@ -8,6 +8,7 @@ interface EpubReaderProps {
   theme: ReaderTheme;
   fontScale: number;
   navSignal: { dir: 'prev' | 'next'; seq: number } | null;
+  seekPercentSignal?: { percent: number; seq: number } | null;
   onLocationChange: (cfi: string, percent: number) => void;
 }
 
@@ -24,6 +25,7 @@ export const EpubReader: React.FC<EpubReaderProps> = ({
   theme,
   fontScale,
   navSignal,
+  seekPercentSignal,
   onLocationChange,
 }) => {
   const viewerRef = useRef<HTMLDivElement | null>(null);
@@ -96,6 +98,16 @@ export const EpubReader: React.FC<EpubReaderProps> = ({
     if (navSignal.dir === 'next') renditionRef.current.next();
     else renditionRef.current.prev();
   }, [navSignal]);
+
+  useEffect(() => {
+    if (!seekPercentSignal || !renditionRef.current || !bookRef.current) return;
+    if (bookRef.current.locations.length() <= 0) return;
+    const pct = Math.max(0, Math.min(1, seekPercentSignal.percent / 100));
+    const cfi = bookRef.current.locations.cfiFromPercentage(pct);
+    if (cfi) {
+      renditionRef.current.display(cfi);
+    }
+  }, [seekPercentSignal]);
 
   if (error) {
     return (

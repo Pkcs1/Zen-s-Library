@@ -5,12 +5,115 @@ import { SEED_BOOKS, SEED_CATEGORIES } from '../data/seedLibrary';
 
 const DB_NAME = 'zens-library-db';
 const DB_VERSION = 1;
+const CLOUD_CHUNK_SIZE = 4 * 1024 * 1024; // 4 MB per chunk (under Supabase 6 MB standard upload limit)
+const CHUNKED_PREFIX = 'chunked:';
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function isUuid(id: string | null | undefined): boolean {
   return Boolean(id && UUID_REGEX.test(id));
+}
+
+function parseChunkedFilePath(
+  filePath: string
+): { basePath: string; partCount: number } | null {
+  if (!filePath.startsWith(CHUNKED_PREFIX)) return null;
+  const rest = filePath.slice(CHUNKED_PREFIX.length);
+  const sepIdx = rest.lastIndexOf(':');
+  if (sepIdx <= 0) return null;
+  const basePath = rest.slice(0, sepIdx);
+  const partCount = Number(rest.slice(sepIdx + 1));
+  if (!basePath || !Number.isInteger(partCount) || partCount <= 0) return null;
+  return { basePath, partCount };
+}
+
+function getChunkPartPath(basePath: string, index: number): string {
+  return `${basePath}.part${String(index).padStart(4, '0')}`;
+}
+
+function expandStoragePaths(filePaths: string[]): string[] {
+  const expanded: string[] = [];
+  for (const path of filePaths) {
+    if (!path) continue;
+    const chunked = parseChunkedFilePath(path);
+    if (chunked) {
+      for (let i = 0; i < chunked.partCount; i++) {
+        expanded.push(getChunkPartPath(chunked.basePath, i));
+      }
+    } else {
+      expanded.push(path);
+    }
+  }
+  return expanded;
+}
+
+async function removeCloudPaths(filePaths: string[]): Promise<void> {
+  if (!supabase || !isSupabaseConfigured) return;
+  const expanded = expandStoragePaths(filePaths);
+  for (let i = 0; i < expanded.length; i += 100) {
+    const batch = expanded.slice(i, i + 100);
+    await supabase.storage.from('books').remove(batch);
+  }
+}
+
+async function uploadWithRetry(
+  storagePath: string,
+  data: Blob,
+  contentType: string
+): Promise<string | null> {
+  if (!supabase) return 'Supabase is not configured.';
+  const { error } = await supabase.storage
+    .from('books')
+    .upload(storagePath, data, { upsert: true, contentType });
+  if (!error) return null;
+
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  const retry = await supabase.storage
+    .from('books')
+    .upload(storagePath, data, { upsert: true, contentType });
+  return retry.error ? retry.error.message : null;
+}
+
+async function uploadBlobToCloud(
+  userId: string,
+  bookId: string,
+  format: BookItem['format'],
+  blob: Blob,
+  onChunkProgress?: (uploaded: number, total: number) => void
+): Promise<{ filePath: string | null; error: string | null }> {
+  const contentType =
+    blob.type || (format === 'epub' ? 'application/epub+zip' : 'application/pdf');
+  const basePath = `${userId}/${bookId}.${format}`;
+
+  if (blob.size <= CLOUD_CHUNK_SIZE) {
+    const err = await uploadWithRetry(basePath, blob, contentType);
+    onChunkProgress?.(1, 1);
+    return { filePath: err ? null : basePath, error: err };
+  }
+
+  const partCount = Math.ceil(blob.size / CLOUD_CHUNK_SIZE);
+  const uploadedPartPaths: string[] = [];
+
+  for (let i = 0; i < partCount; i++) {
+    const start = i * CLOUD_CHUNK_SIZE;
+    const end = Math.min(blob.size, start + CLOUD_CHUNK_SIZE);
+    const partBlob = blob.slice(start, end, contentType);
+    const partPath = getChunkPartPath(basePath, i);
+
+    const err = await uploadWithRetry(partPath, partBlob, contentType);
+    if (err) {
+      if (uploadedPartPaths.length > 0) {
+        await removeCloudPaths(uploadedPartPaths);
+      }
+      return { filePath: null, error: err };
+    }
+
+    uploadedPartPaths.push(partPath);
+    onChunkProgress?.(i + 1, partCount);
+  }
+
+  return { filePath: `${CHUNKED_PREFIX}${basePath}:${partCount}`, error: null };
 }
 
 interface ZenDB {
@@ -66,7 +169,9 @@ async function upsertCategoryToCloud(userId: string, cat: CategoryRack): Promise
 }
 
 /** Ensure all local categories & books have valid UUIDs and push them to Supabase */
-export async function syncLocalToCloud(): Promise<{
+export async function syncLocalToCloud(
+  onProgress?: (status: string) => void
+): Promise<{
   syncedCategories: number;
   syncedBooks: number;
   error: string | null;
@@ -115,42 +220,65 @@ export async function syncLocalToCloud(): Promise<{
 
     const blob = fileMap.get(b.id);
     let storagePath = b.filePath ?? `${userId}/${newBookId}.${b.format}`;
+    let uploadFailed = false;
     if (blob) {
-      const { error: upErr } = await supabase.storage
-        .from('books')
-        .upload(storagePath, blob, { upsert: true });
-      if (upErr && !firstError) firstError = upErr.message;
+      onProgress?.(`Uploading "${b.title}"...`);
+      const uploadRes = await uploadBlobToCloud(
+        userId,
+        newBookId,
+        b.format,
+        blob,
+        (done, total) => {
+          onProgress?.(
+            total > 1
+              ? `Uploading "${b.title}" (part ${done}/${total})...`
+              : `Uploading "${b.title}"...`
+          );
+        }
+      );
+      if (uploadRes.error) {
+        if (!firstError) firstError = `${b.title}: ${uploadRes.error}`;
+        uploadFailed = true;
+      } else if (uploadRes.filePath) {
+        storagePath = uploadRes.filePath;
+      }
     }
 
     const updatedBook: BookItem = {
       ...b,
       id: newBookId,
       categoryId: newCatId,
-      filePath: blob || b.filePath ? storagePath : b.filePath,
+      filePath: uploadFailed
+        ? b.filePath
+        : blob || b.filePath
+          ? storagePath
+          : b.filePath,
     };
 
-    const { error: bookErr } = await supabase.from('books').upsert({
-      id: updatedBook.id,
-      user_id: userId,
-      category_id: updatedBook.categoryId,
-      title: updatedBook.title,
-      author: updatedBook.author,
-      format: updatedBook.format,
-      file_name: updatedBook.fileName,
-      file_path: updatedBook.filePath ?? storagePath,
-      file_size_bytes: updatedBook.fileSizeBytes,
-      page_count: updatedBook.pageCount,
-      spine_color: updatedBook.spineColor,
-      spine_text_color: updatedBook.spineTextColor,
-      spine_height: updatedBook.spineHeight,
-      spine_thickness: updatedBook.spineThickness,
-      tilt_deg: updatedBook.tiltDeg,
-      is_stacked: Boolean(updatedBook.isStacked),
-      current_location: updatedBook.currentLocation,
-      progress_percent: updatedBook.progressPercent,
-      last_read_at: updatedBook.lastReadAt ?? null,
-    });
-    if (bookErr && !firstError) firstError = bookErr.message;
+    if (!uploadFailed) {
+      const { error: bookErr } = await supabase.from('books').upsert({
+        id: updatedBook.id,
+        user_id: userId,
+        category_id: updatedBook.categoryId,
+        title: updatedBook.title,
+        author: updatedBook.author,
+        format: updatedBook.format,
+        file_name: updatedBook.fileName,
+        file_path: updatedBook.filePath ?? storagePath,
+        file_size_bytes: updatedBook.fileSizeBytes,
+        page_count: updatedBook.pageCount,
+        spine_color: updatedBook.spineColor,
+        spine_text_color: updatedBook.spineTextColor,
+        spine_height: updatedBook.spineHeight,
+        spine_thickness: updatedBook.spineThickness,
+        tilt_deg: updatedBook.tiltDeg,
+        is_stacked: Boolean(updatedBook.isStacked),
+        current_location: updatedBook.currentLocation,
+        progress_percent: updatedBook.progressPercent,
+        last_read_at: updatedBook.lastReadAt ?? null,
+      });
+      if (bookErr && !firstError) firstError = bookErr.message;
+    }
     migratedBooks.push(updatedBook);
   }
 
@@ -339,7 +467,7 @@ export async function clearAllLibraryData(): Promise<void> {
         .map((b) => b.filePath)
         .filter((p): p is string => Boolean(p));
       if (filePaths.length > 0) {
-        await supabase.storage.from('books').remove(filePaths);
+        await removeCloudPaths(filePaths);
       }
       await supabase.from('bookmarks').delete().eq('user_id', data.user.id);
       await supabase.from('books').delete().eq('user_id', data.user.id);
@@ -378,7 +506,14 @@ export async function saveCategory(category: CategoryRack): Promise<void> {
   }
 }
 
-export async function saveBookWithFile(book: BookItem, fileBlob?: Blob): Promise<BookItem> {
+export async function saveBookWithFile(
+  book: BookItem,
+  fileBlob?: Blob,
+  options?: {
+    onChunkProgress?: (uploaded: number, total: number) => void;
+    onCloudError?: (message: string) => void;
+  }
+): Promise<BookItem> {
   const db = await getDb();
   let updatedBook: BookItem = {
     ...book,
@@ -414,45 +549,117 @@ export async function saveBookWithFile(book: BookItem, fileBlob?: Blob): Promise
         await upsertCategoryToCloud(userId, targetCat);
       }
 
-      const storagePath = updatedBook.filePath ?? `${userId}/${updatedBook.id}.${updatedBook.format}`;
+      let uploadFailed = false;
       if (fileBlob) {
-        const { error: uploadErr } = await supabase.storage
-          .from('books')
-          .upload(storagePath, fileBlob, { upsert: true });
-        if (uploadErr) {
-          console.error('Supabase file upload error:', uploadErr.message);
-        } else {
-          updatedBook.filePath = storagePath;
+        const uploadRes = await uploadBlobToCloud(
+          userId,
+          updatedBook.id,
+          updatedBook.format,
+          fileBlob,
+          options?.onChunkProgress
+        );
+        if (uploadRes.error) {
+          console.error('Supabase file upload error:', uploadRes.error);
+          options?.onCloudError?.(uploadRes.error);
+          uploadFailed = true;
+        } else if (uploadRes.filePath) {
+          updatedBook.filePath = uploadRes.filePath;
         }
       }
 
-      const { error: bookErr } = await supabase.from('books').upsert({
-        id: updatedBook.id,
-        user_id: userId,
-        category_id: updatedBook.categoryId,
-        title: updatedBook.title,
-        author: updatedBook.author,
-        format: updatedBook.format,
-        file_name: updatedBook.fileName,
-        file_path: updatedBook.filePath ?? storagePath,
-        file_size_bytes: updatedBook.fileSizeBytes,
-        page_count: updatedBook.pageCount,
-        spine_color: updatedBook.spineColor,
-        spine_text_color: updatedBook.spineTextColor,
-        spine_height: updatedBook.spineHeight,
-        spine_thickness: updatedBook.spineThickness,
-        tilt_deg: updatedBook.tiltDeg,
-        is_stacked: Boolean(updatedBook.isStacked),
-        current_location: updatedBook.currentLocation,
-        progress_percent: updatedBook.progressPercent,
-        last_read_at: updatedBook.lastReadAt ?? null,
-      });
-      if (bookErr) console.error('Supabase book save error:', bookErr.message);
+      if (!uploadFailed) {
+        const storagePath =
+          updatedBook.filePath ?? `${userId}/${updatedBook.id}.${updatedBook.format}`;
+        const { error: bookErr } = await supabase.from('books').upsert({
+          id: updatedBook.id,
+          user_id: userId,
+          category_id: updatedBook.categoryId,
+          title: updatedBook.title,
+          author: updatedBook.author,
+          format: updatedBook.format,
+          file_name: updatedBook.fileName,
+          file_path: storagePath,
+          file_size_bytes: updatedBook.fileSizeBytes,
+          page_count: updatedBook.pageCount,
+          spine_color: updatedBook.spineColor,
+          spine_text_color: updatedBook.spineTextColor,
+          spine_height: updatedBook.spineHeight,
+          spine_thickness: updatedBook.spineThickness,
+          tilt_deg: updatedBook.tiltDeg,
+          is_stacked: Boolean(updatedBook.isStacked),
+          current_location: updatedBook.currentLocation,
+          progress_percent: updatedBook.progressPercent,
+          last_read_at: updatedBook.lastReadAt ?? null,
+        });
+        if (bookErr) {
+          console.error('Supabase book save error:', bookErr.message);
+          options?.onCloudError?.(bookErr.message);
+        }
+      }
     }
   }
 
   await db.put('books', updatedBook);
   return updatedBook;
+}
+
+export interface BatchSaveResult {
+  saved: BookItem[];
+  failed: Array<{ bookId: string; title: string; error: string }>;
+  cloudWarnings: Array<{ bookId: string; title: string; error: string }>;
+  categoryRemap: Record<string, string>;
+}
+
+export async function saveBooksWithFiles(
+  entries: Array<{ book: BookItem; file?: Blob }>,
+  onProgress?: (
+    completed: number,
+    total: number,
+    chunkProgress?: { uploaded: number; total: number }
+  ) => void
+): Promise<BatchSaveResult> {
+  const saved: BookItem[] = [];
+  const failed: Array<{ bookId: string; title: string; error: string }> = [];
+  const cloudWarnings: Array<{ bookId: string; title: string; error: string }> = [];
+  const categoryRemap: Record<string, string> = {};
+
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    const mappedCategoryId = categoryRemap[entry.book.categoryId] ?? entry.book.categoryId;
+    const bookToSave: BookItem =
+      mappedCategoryId !== entry.book.categoryId
+        ? { ...entry.book, categoryId: mappedCategoryId }
+        : entry.book;
+
+    try {
+      const savedBook = await saveBookWithFile(bookToSave, entry.file, {
+        onChunkProgress: (uploaded, total) => {
+          onProgress?.(i, entries.length, { uploaded, total });
+        },
+        onCloudError: (msg) => {
+          cloudWarnings.push({
+            bookId: bookToSave.id,
+            title: bookToSave.title,
+            error: msg,
+          });
+        },
+      });
+      if (savedBook.categoryId !== bookToSave.categoryId) {
+        categoryRemap[entry.book.categoryId] = savedBook.categoryId;
+      }
+      saved.push(savedBook);
+    } catch (err) {
+      failed.push({
+        bookId: entry.book.id,
+        title: entry.book.title,
+        error: err instanceof Error ? err.message : 'Failed to save book.',
+      });
+    }
+
+    onProgress?.(i + 1, entries.length);
+  }
+
+  return { saved, failed, cloudWarnings, categoryRemap };
 }
 
 export async function getBookFileBlob(book: BookItem): Promise<Blob | null> {
@@ -461,6 +668,36 @@ export async function getBookFileBlob(book: BookItem): Promise<Blob | null> {
   if (cached?.blob) return cached.blob;
 
   if (supabase && isSupabaseConfigured && book.filePath) {
+    const chunked = parseChunkedFilePath(book.filePath);
+    if (chunked) {
+      const parts: Blob[] = new Array(chunked.partCount);
+      for (let start = 0; start < chunked.partCount; start += 3) {
+        const batchIndices = Array.from(
+          { length: Math.min(3, chunked.partCount - start) },
+          (_, offset) => start + offset
+        );
+        const results = await Promise.all(
+          batchIndices.map(async (idx) => {
+            const { data, error } = await supabase!.storage
+              .from('books')
+              .download(getChunkPartPath(chunked.basePath, idx));
+            return { idx, data, error };
+          })
+        );
+        for (const res of results) {
+          if (res.error || !res.data) {
+            console.error('Supabase chunk download error:', res.error?.message);
+            return null;
+          }
+          parts[res.idx] = res.data;
+        }
+      }
+      const mime = book.format === 'epub' ? 'application/epub+zip' : 'application/pdf';
+      const fullBlob = new Blob(parts, { type: mime });
+      await db.put('files', { id: book.id, blob: fullBlob, updatedAt: new Date().toISOString() });
+      return fullBlob;
+    }
+
     const { data, error } = await supabase.storage.from('books').download(book.filePath);
     if (!error && data) {
       await db.put('files', { id: book.id, blob: data, updatedAt: new Date().toISOString() });
@@ -513,7 +750,7 @@ export async function deleteBook(bookId: string, filePath?: string): Promise<voi
     if (data.user) {
       await supabase.from('books').delete().eq('id', bookId);
       if (filePath) {
-        await supabase.storage.from('books').remove([filePath]);
+        await removeCloudPaths([filePath]);
       }
     }
   }
@@ -569,7 +806,7 @@ export async function deleteCategoriesAndBooks(
         .filter((b) => bookSet.has(b.id) && b.filePath)
         .map((b) => b.filePath as string);
       if (filePaths.length > 0) {
-        await supabase.storage.from('books').remove(filePaths);
+        await removeCloudPaths(filePaths);
       }
       const validBookUuids = deletedBookIds.filter(isUuid);
       const validCatUuids = deletedCategoryIds.filter(isUuid);

@@ -48,7 +48,12 @@ export const ReaderOverlay: React.FC<ReaderOverlayProps> = ({
   const [progressPercent, setProgressPercent] = useState(book.progressPercent || 0);
   const [currentLocation, setCurrentLocation] = useState(book.currentLocation || '1');
   const [epubNavSignal, setEpubNavSignal] = useState<{ dir: 'prev' | 'next'; seq: number } | null>(null);
+  const [epubSeekSignal, setEpubSeekSignal] = useState<{ percent: number; seq: number } | null>(null);
   const [demoChapterIdx, setDemoChapterIdx] = useState(0);
+  const [scrubValue, setScrubValue] = useState<number | null>(null);
+  const [editingPage, setEditingPage] = useState(false);
+  const [pageInput, setPageInput] = useState('');
+  const isDraggingScrubberRef = useRef(false);
 
   useEffect(() => {
     const prevOverflow = document.body.style.overflow;
@@ -79,6 +84,7 @@ export const ReaderOverlay: React.FC<ReaderOverlayProps> = ({
   // Keyboard navigation (Escape to close, Left/Right arrows to flip pages)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement | null)?.tagName === 'INPUT') return;
       if (e.key === 'Escape') onClose();
       if (e.key === 'ArrowRight') handleNext();
       if (e.key === 'ArrowLeft') handlePrev();
@@ -101,6 +107,61 @@ export const ReaderOverlay: React.FC<ReaderOverlayProps> = ({
   ];
 
   const activeDemoChapter = chapters[Math.min(demoChapterIdx, chapters.length - 1)];
+
+  const isPdf = Boolean(fileBlob && book.format === 'pdf');
+  const isEpub = Boolean(fileBlob && book.format === 'epub');
+  const scrubberMin = isEpub ? 0 : 1;
+  const scrubberMax = isPdf
+    ? Math.max(1, totalPages)
+    : isEpub
+      ? 100
+      : Math.max(1, chapters.length);
+  const committedValue = isPdf
+    ? currentPage
+    : isEpub
+      ? progressPercent
+      : demoChapterIdx + 1;
+  const displayValue = scrubValue ?? committedValue;
+  const displayPercent = isPdf
+    ? Math.round((displayValue / Math.max(1, totalPages)) * 100)
+    : isEpub
+      ? displayValue
+      : Math.round((displayValue / Math.max(1, chapters.length)) * 100);
+
+  const commitScrub = (rawTarget: number) => {
+    const targetVal = Math.min(scrubberMax, Math.max(scrubberMin, Math.round(rawTarget)));
+    setScrubValue(null);
+    if (isPdf) {
+      setCurrentPage(targetVal);
+      return;
+    }
+    if (isEpub) {
+      setProgressPercent(targetVal);
+      setEpubSeekSignal((prev) => ({ percent: targetVal, seq: (prev?.seq ?? 0) + 1 }));
+      return;
+    }
+    const nextIdx = targetVal - 1;
+    setDemoChapterIdx(nextIdx);
+    const pct = Math.round(((nextIdx + 1) / chapters.length) * 100);
+    setProgressPercent(pct);
+    setCurrentLocation(String(nextIdx + 1));
+    onUpdateProgress(book, String(nextIdx + 1), pct);
+  };
+
+  const handleScrubberWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const delta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+    if (delta === 0) return;
+    const dir = delta > 0 ? 1 : -1;
+    const step = isPdf
+      ? e.shiftKey
+        ? 1
+        : Math.max(1, Math.min(25, Math.round(totalPages * 0.01)))
+      : isEpub
+        ? 5
+        : 1;
+    commitScrub(committedValue + dir * step);
+  };
 
   const isBookmarked = bookmarks.some(
     (bm) => bm.bookId === book.id && bm.location === currentLocation
@@ -328,6 +389,7 @@ export const ReaderOverlay: React.FC<ReaderOverlayProps> = ({
               theme={theme}
               fontScale={zoom}
               navSignal={epubNavSignal}
+              seekPercentSignal={epubSeekSignal}
               onLocationChange={(cfi, pct) => {
                 setCurrentLocation(cfi);
                 setProgressPercent(pct);
@@ -438,7 +500,7 @@ export const ReaderOverlay: React.FC<ReaderOverlayProps> = ({
       </div>
 
       {/* Bottom Floating Scrubber Bar */}
-      <div className="reader-scrubber">
+      <div className="reader-scrubber" onWheel={handleScrubberWheel}>
         <button
           onClick={handlePrev}
           style={{
@@ -457,23 +519,81 @@ export const ReaderOverlay: React.FC<ReaderOverlayProps> = ({
           <span>Prev</span>
         </button>
 
-        <div className="reader-scrubber-track">
-          <div
-            style={{
-              width: `${progressPercent}%`,
-              height: '100%',
-              borderRadius: 999,
-              background: '#C86D51',
-              transition: 'width 0.25s ease',
-            }}
-          />
-        </div>
+        <input
+          type="range"
+          className="reader-scrubber-range"
+          aria-label="Jump to page"
+          min={scrubberMin}
+          max={scrubberMax}
+          value={displayValue}
+          style={{ '--scrub-pct': `${displayPercent}%` } as React.CSSProperties}
+          onPointerDown={() => {
+            isDraggingScrubberRef.current = true;
+          }}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            setScrubValue(v);
+            if (!isDraggingScrubberRef.current) {
+              commitScrub(v);
+            }
+          }}
+          onPointerUp={(e) => {
+            isDraggingScrubberRef.current = false;
+            commitScrub(Number((e.target as HTMLInputElement).value));
+          }}
+          onPointerCancel={() => {
+            isDraggingScrubberRef.current = false;
+            setScrubValue(null);
+          }}
+        />
 
-        <span className="reader-scrubber-label">
-          {fileBlob && book.format === 'pdf'
-            ? `${currentPage} / ${totalPages} (${progressPercent}%)`
-            : `${progressPercent}%`}
-        </span>
+        {isPdf ? (
+          editingPage ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const parsed = parseInt(pageInput, 10);
+                if (Number.isFinite(parsed)) {
+                  commitScrub(parsed);
+                }
+                setEditingPage(false);
+              }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}
+            >
+              <input
+                type="number"
+                className="reader-page-jump-input"
+                min={1}
+                max={totalPages}
+                value={pageInput}
+                autoFocus
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => setPageInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    setEditingPage(false);
+                  }
+                }}
+                onBlur={() => setEditingPage(false)}
+              />
+              <span className="reader-scrubber-label">/ {totalPages}</span>
+            </form>
+          ) : (
+            <button
+              type="button"
+              className="reader-scrubber-label reader-page-jump-btn"
+              title="Click to jump to page number, or scroll/drag bar"
+              onClick={() => {
+                setPageInput(String(currentPage));
+                setEditingPage(true);
+              }}
+            >
+              {displayValue} / {totalPages} ({displayPercent}%)
+            </button>
+          )
+        ) : (
+          <span className="reader-scrubber-label">{displayPercent}%</span>
+        )}
 
         <button
           onClick={handleNext}

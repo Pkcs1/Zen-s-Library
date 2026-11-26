@@ -45,7 +45,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const handleManualSync = async () => {
     setSyncing(true);
     setSyncStatus(null);
-    const res = await syncLocalToCloud();
+    const res = await syncLocalToCloud((status) => setSyncStatus(status));
     setSyncing(false);
     if (res.error) {
       setSyncStatus(`Sync warning: ${res.error}`);
