@@ -1,6 +1,6 @@
 import React from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { FolderOpen } from 'lucide-react';
+import { Check, FolderOpen } from 'lucide-react';
 import { CategoryRack } from '../types/library';
 
 interface Binder3DProps {
@@ -9,6 +9,9 @@ interface Binder3DProps {
   subBinderCount: number;
   isAnyHovered: boolean;
   isHovered: boolean;
+  deleteMode?: boolean;
+  isSelectedForDelete?: boolean;
+  onToggleSelectForDelete?: (binderId: string) => void;
   onHoverStart: () => void;
   onHoverEnd: () => void;
   onOpenBinder: (binder: CategoryRack, originRect: DOMRect) => void;
@@ -20,6 +23,9 @@ export const Binder3D: React.FC<Binder3DProps> = ({
   subBinderCount,
   isAnyHovered,
   isHovered,
+  deleteMode = false,
+  isSelectedForDelete = false,
+  onToggleSelectForDelete,
   onHoverStart,
   onHoverEnd,
   onOpenBinder,
@@ -31,6 +37,10 @@ export const Binder3D: React.FC<Binder3DProps> = ({
       onMouseEnter={onHoverStart}
       onMouseLeave={onHoverEnd}
       onClick={(e) => {
+        if (deleteMode) {
+          onToggleSelectForDelete?.(binder.id);
+          return;
+        }
         const rect = e.currentTarget.getBoundingClientRect();
         onOpenBinder(binder, rect);
       }}
@@ -59,12 +69,35 @@ export const Binder3D: React.FC<Binder3DProps> = ({
           className="binder-spine-face"
           style={{
             background: binder.accentColor || '#2B463C',
+            outline: isSelectedForDelete ? '3px solid #B4433C' : undefined,
+            outlineOffset: 2,
             boxShadow: isHovered
               ? '-22px 28px 40px rgba(44, 38, 33, 0.36)'
               : '-10px 12px 18px rgba(44, 38, 33, 0.22)',
           }}
         >
           <div className="book-spine-sheen" />
+          {deleteMode && (
+            <span
+              style={{
+                position: 'absolute',
+                top: 8,
+                right: 8,
+                width: 22,
+                height: 22,
+                borderRadius: '50%',
+                background: isSelectedForDelete ? '#B4433C' : 'rgba(255,255,255,0.92)',
+                border: `2px solid ${isSelectedForDelete ? '#B4433C' : '#8C8073'}`,
+                color: '#FFFFFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 5,
+              }}
+            >
+              {isSelectedForDelete && <Check size={12} strokeWidth={3} />}
+            </span>
+          )}
 
           {/* Top Cream Index Label Plate */}
           <div className="binder-label-plate">
@@ -95,7 +128,7 @@ export const Binder3D: React.FC<Binder3DProps> = ({
 
       {/* Floating Binder Preview Card */}
       <AnimatePresence>
-        {isHovered && (
+        {isHovered && !deleteMode && (
           <motion.div
             className="hover-preview-card"
             initial={{ opacity: 0, y: 10, scale: 0.94 }}

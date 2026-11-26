@@ -2,10 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { BookItem, BookmarkItem, CategoryRack } from './types/library';
 import {
-  clearAllLibraryData,
   deleteBook,
+  deleteCategoriesAndBooks,
   loadLibraryState,
-  restoreSampleLibrary,
   saveBookWithFile,
   saveCategory,
   toggleBookmark,
@@ -19,7 +18,6 @@ import { ReaderOverlay } from './components/ReaderOverlay';
 import { UploadBookModal } from './components/UploadBookModal';
 import { NewCategoryModal } from './components/NewCategoryModal';
 import { AuthModal } from './components/AuthModal';
-import { ResetLibraryModal } from './components/ResetLibraryModal';
 
 export const App: React.FC = () => {
   const [categories, setCategories] = useState<CategoryRack[]>([]);
@@ -37,7 +35,6 @@ export const App: React.FC = () => {
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [creatingBinderParent, setCreatingBinderParent] = useState<CategoryRack | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [showResetModal, setShowResetModal] = useState(false);
 
   const refreshLibrary = useCallback(async () => {
     const state = await loadLibraryState();
@@ -153,22 +150,22 @@ export const App: React.FC = () => {
     setActiveBook(null);
   };
 
-  const handleClearAll = async () => {
-    await clearAllLibraryData();
-    setCategories([]);
-    setBooks([]);
-    setBookmarks([]);
-    setSelectedCategoryId(null);
-    setActiveBook(null);
-  };
-
-  const handleRestoreSamples = async () => {
-    const restored = await restoreSampleLibrary();
-    setCategories(restored.categories);
-    setBooks(restored.books);
-    setBookmarks([]);
-    setSelectedCategoryId(null);
-    setActiveBook(null);
+  const handleDeleteItems = async (categoryIds: string[], bookIds: string[]) => {
+    const { deletedCategoryIds, deletedBookIds } = await deleteCategoriesAndBooks(
+      categoryIds,
+      bookIds
+    );
+    const catSet = new Set(deletedCategoryIds);
+    const bookSet = new Set(deletedBookIds);
+    setCategories((prev) => prev.filter((c) => !catSet.has(c.id)));
+    setBooks((prev) => prev.filter((b) => !bookSet.has(b.id)));
+    setBookmarks((prev) => prev.filter((bm) => !bookSet.has(bm.bookId)));
+    if (selectedCategoryId && catSet.has(selectedCategoryId)) {
+      setSelectedCategoryId(null);
+    }
+    if (activeBook && bookSet.has(activeBook.id)) {
+      setActiveBook(null);
+    }
   };
 
   return (
@@ -199,7 +196,7 @@ export const App: React.FC = () => {
                 setCreatingBinderParent(null);
                 setShowCategoryModal(true);
               }}
-              onResetClick={() => setShowResetModal(true)}
+              onDeleteRacks={(rackIds) => handleDeleteItems(rackIds, [])}
             />
           ) : (
             <Bookshelf3D
@@ -223,6 +220,7 @@ export const App: React.FC = () => {
                 setCreatingBinderParent(selectedCategory);
                 setShowCategoryModal(true);
               }}
+              onDeleteItems={handleDeleteItems}
             />
           )}
         </AnimatePresence>
@@ -274,19 +272,6 @@ export const App: React.FC = () => {
             cloudUserEmail={cloudUserEmail}
             onClose={() => setShowAuthModal(false)}
             onAuthSuccess={refreshLibrary}
-          />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showResetModal && (
-          <ResetLibraryModal
-            rackCount={categories.length}
-            bookCount={books.length}
-            isCloudSynced={Boolean(cloudUserEmail)}
-            onClose={() => setShowResetModal(false)}
-            onClearAll={handleClearAll}
-            onRestoreSamples={handleRestoreSamples}
           />
         )}
       </AnimatePresence>

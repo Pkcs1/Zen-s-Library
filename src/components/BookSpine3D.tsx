@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { Check } from 'lucide-react';
 import { BookItem } from '../types/library';
 
 interface BookSpine3DProps {
   book: BookItem;
   isAnyHovered: boolean;
   isHovered: boolean;
+  deleteMode?: boolean;
+  isSelectedForDelete?: boolean;
+  onToggleSelectForDelete?: (bookId: string) => void;
   onHoverStart: () => void;
   onHoverEnd: () => void;
   onOpenBook: (book: BookItem) => void;
@@ -21,6 +25,9 @@ export const BookSpine3D: React.FC<BookSpine3DProps> = ({
   book,
   isAnyHovered,
   isHovered,
+  deleteMode = false,
+  isSelectedForDelete = false,
+  onToggleSelectForDelete,
   onHoverStart,
   onHoverEnd,
   onOpenBook,
@@ -28,6 +35,10 @@ export const BookSpine3D: React.FC<BookSpine3DProps> = ({
   const [isOpening, setIsOpening] = useState(false);
 
   const handleClick = () => {
+    if (deleteMode) {
+      onToggleSelectForDelete?.(book.id);
+      return;
+    }
     setIsOpening(true);
     setTimeout(() => {
       onOpenBook(book);
@@ -58,6 +69,8 @@ export const BookSpine3D: React.FC<BookSpine3DProps> = ({
             height: book.spineThickness,
             background: book.spineColor,
             color: book.spineTextColor,
+            outline: isSelectedForDelete ? '3px solid #B4433C' : undefined,
+            outlineOffset: 2,
             boxShadow: isHovered
               ? '-14px 18px 28px rgba(44, 38, 33, 0.34)'
               : '-6px 8px 14px rgba(44, 38, 33, 0.18)',
@@ -65,10 +78,30 @@ export const BookSpine3D: React.FC<BookSpine3DProps> = ({
         >
           <div className="book-spine-sheen" />
           <span className="book-stacked-title">{book.title}</span>
+          {deleteMode && (
+            <span
+              style={{
+                position: 'absolute',
+                right: 10,
+                width: 20,
+                height: 20,
+                borderRadius: '50%',
+                background: isSelectedForDelete ? '#B4433C' : 'rgba(255,255,255,0.9)',
+                border: `2px solid ${isSelectedForDelete ? '#B4433C' : '#8C8073'}`,
+                color: '#FFFFFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 4,
+              }}
+            >
+              {isSelectedForDelete && <Check size={12} strokeWidth={3} />}
+            </span>
+          )}
         </div>
 
         <AnimatePresence>
-          {isHovered && (
+          {isHovered && !deleteMode && (
             <motion.div
               className="hover-preview-card"
               initial={{ opacity: 0, y: 12, scale: 0.94 }}
@@ -124,6 +157,8 @@ export const BookSpine3D: React.FC<BookSpine3DProps> = ({
             height: book.spineHeight,
             background: book.spineColor,
             color: book.spineTextColor,
+            outline: isSelectedForDelete ? '3px solid #B4433C' : undefined,
+            outlineOffset: 2,
             boxShadow: isHovered
               ? '-22px 28px 40px rgba(44, 38, 33, 0.36)'
               : '-8px 10px 14px rgba(44, 38, 33, 0.2)',
@@ -133,6 +168,28 @@ export const BookSpine3D: React.FC<BookSpine3DProps> = ({
           <div className="book-spine-sheen" />
           <div className="book-spine-band" style={{ top: 14 }} />
           <div className="book-spine-band" style={{ bottom: 14 }} />
+          {deleteMode && (
+            <span
+              style={{
+                position: 'absolute',
+                top: 10,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                width: 22,
+                height: 22,
+                borderRadius: '50%',
+                background: isSelectedForDelete ? '#B4433C' : 'rgba(255,255,255,0.92)',
+                border: `2px solid ${isSelectedForDelete ? '#B4433C' : '#8C8073'}`,
+                color: '#FFFFFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 5,
+              }}
+            >
+              {isSelectedForDelete && <Check size={12} strokeWidth={3} />}
+            </span>
+          )}
           <span className="book-spine-title">{book.title}</span>
         </div>
 
@@ -154,7 +211,7 @@ export const BookSpine3D: React.FC<BookSpine3DProps> = ({
 
       {/* Floating Metadata Preview Card */}
       <AnimatePresence>
-        {isHovered && !isOpening && (
+        {isHovered && !isOpening && !deleteMode && (
           <motion.div
             className="hover-preview-card"
             initial={{ opacity: 0, y: 12, scale: 0.94 }}

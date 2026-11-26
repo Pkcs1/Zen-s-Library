@@ -300,6 +300,72 @@ export async function deleteBook(bookId: string, filePath?: string): Promise<voi
   }
 }
 
+export async function deleteCategoriesAndBooks(
+  categoryIdsToDelete: string[],
+  bookIdsToDelete: string[]
+): Promise<{ deletedCategoryIds: string[]; deletedBookIds: string[] }> {
+  const db = await getDb();
+  const allCategories = await db.getAll('categories');
+  const allBooks = await db.getAll('books');
+  const allBookmarks = await db.getAll('bookmarks');
+
+  // Recursively include descendant binders of any deleted category
+  const catSet = new Set<string>(categoryIdsToDelete);
+  let added = true;
+  while (added) {
+    added = false;
+    for (const c of allCategories) {
+      if (c.parentId && catSet.has(c.parentId) && !catSet.has(c.id)) {
+        catSet.add(c.id);
+        added = true;
+      }
+    }
+  }
+
+  const bookSet = new Set<string>(bookIdsToDelete);
+  for (const b of allBooks) {
+    if (catSet.has(b.categoryId)) {
+      bookSet.add(b.id);
+    }
+  }
+
+  const deletedCategoryIds = Array.from(catSet);
+  const deletedBookIds = Array.from(bookSet);
+
+  const tx = db.transaction(['categories', 'books', 'files', 'bookmarks'], 'readwrite');
+  for (const cid of deletedCategoryIds) await tx.objectStore('categories').delete(cid);
+  for (const bid of deletedBookIds) {
+    await tx.objectStore('books').delete(bid);
+    await tx.objectStore('files').delete(bid);
+  }
+  for (const bm of allBookmarks) {
+    if (bookSet.has(bm.bookId)) await tx.objectStore('bookmarks').delete(bm.id);
+  }
+  await tx.done;
+  localStorage.setItem('zens-library-initialized', 'true');
+
+  if (supabase && isSupabaseConfigured) {
+    const { data } = await supabase.auth.getUser();
+    if (data.user) {
+      const filePaths = allBooks
+        .filter((b) => bookSet.has(b.id) && b.filePath)
+        .map((b) => b.filePath as string);
+      if (filePaths.length > 0) {
+        await supabase.storage.from('books').remove(filePaths);
+      }
+      if (deletedBookIds.length > 0) {
+        await supabase.from('bookmarks').delete().in('book_id', deletedBookIds);
+        await supabase.from('books').delete().in('id', deletedBookIds);
+      }
+      if (deletedCategoryIds.length > 0) {
+        await supabase.from('categories').delete().in('id', deletedCategoryIds);
+      }
+    }
+  }
+
+  return { deletedCategoryIds, deletedBookIds };
+}
+
 export async function toggleBookmark(bookmark: BookmarkItem, exists: boolean): Promise<void> {
   const db = await getDb();
   if (exists) {

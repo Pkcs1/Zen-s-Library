@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, FolderPlus, Plus } from 'lucide-react';
+import { ArrowLeft, FolderPlus, Plus, Trash2, X } from 'lucide-react';
 import { BookFormat, BookItem, CategoryRack } from '../types/library';
 import { BookSpine3D } from './BookSpine3D';
 import { Binder3D } from './Binder3D';
@@ -19,6 +19,7 @@ interface Bookshelf3DProps {
   onOpenBook: (book: BookItem) => void;
   onAddBookClick: () => void;
   onNewBinderClick: () => void;
+  onDeleteItems: (binderIds: string[], bookIds: string[]) => Promise<void>;
 }
 
 function countBooksRecursive(
@@ -48,9 +49,14 @@ export const Bookshelf3D: React.FC<Bookshelf3DProps> = ({
   onOpenBook,
   onAddBookClick,
   onNewBinderClick,
+  onDeleteItems,
 }) => {
   const [formatFilter, setFormatFilter] = useState<'all' | BookFormat>('all');
   const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
+  const [deleteMode, setDeleteMode] = useState(false);
+  const [selectedBinderIds, setSelectedBinderIds] = useState<string[]>([]);
+  const [selectedBookIds, setSelectedBookIds] = useState<string[]>([]);
+  const [deleting, setDeleting] = useState(false);
 
   const filteredBooks = useMemo(() => {
     if (formatFilter === 'all') return books;
@@ -73,6 +79,40 @@ export const Bookshelf3D: React.FC<Bookshelf3DProps> = ({
 
   const originStyle = zoomOrigin ? `${zoomOrigin.x}px ${zoomOrigin.y}px` : '50% 40%';
   const isEmpty = childBinders.length === 0 && filteredBooks.length === 0;
+  const totalSelected = selectedBinderIds.length + selectedBookIds.length;
+  const totalItemsOnShelf = childBinders.length + filteredBooks.length;
+
+  const toggleBookSelect = (id: string) => {
+    setSelectedBookIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleBinderSelect = (id: string) => {
+    setSelectedBinderIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (totalSelected === totalItemsOnShelf) {
+      setSelectedBinderIds([]);
+      setSelectedBookIds([]);
+    } else {
+      setSelectedBinderIds(childBinders.map((b) => b.id));
+      setSelectedBookIds(filteredBooks.map((b) => b.id));
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (totalSelected === 0) return;
+    setDeleting(true);
+    await onDeleteItems(selectedBinderIds, selectedBookIds);
+    setDeleting(false);
+    setSelectedBinderIds([]);
+    setSelectedBookIds([]);
+    setDeleteMode(false);
+  };
 
   return (
     <motion.section
@@ -156,6 +196,29 @@ export const Bookshelf3D: React.FC<Bookshelf3DProps> = ({
             </button>
           </div>
 
+          {!isEmpty && (
+            <button
+              className="zen-btn-secondary"
+              onClick={() => {
+                setDeleteMode((d) => !d);
+                setSelectedBinderIds([]);
+                setSelectedBookIds([]);
+              }}
+              style={
+                deleteMode
+                  ? {
+                      background: '#FDF4F2',
+                      borderColor: '#D98E84',
+                      color: '#9E332C',
+                    }
+                  : undefined
+              }
+            >
+              {deleteMode ? <X size={14} /> : <Trash2 size={14} />}
+              <span>{deleteMode ? 'Cancel Delete' : 'Delete'}</span>
+            </button>
+          )}
+
           <button className="zen-btn-secondary" onClick={onNewBinderClick}>
             <FolderPlus size={15} />
             <span>New Binder</span>
@@ -168,10 +231,69 @@ export const Bookshelf3D: React.FC<Bookshelf3DProps> = ({
         </div>
       </div>
 
-      <p className="shelf-hint">
-        Hover any binder or book spine to slide it halfway out in 3D &bull; Click a binder to open
-        its sub-genre shelf, or click a book to read
-      </p>
+      {/* Delete Mode Action Bar inside Rack */}
+      {deleteMode && !isEmpty ? (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          style={{
+            marginBottom: 24,
+            padding: '14px 20px',
+            borderRadius: 16,
+            background: '#FDF4F2',
+            border: '1px solid #F0C7BE',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 12,
+          }}
+        >
+          <div style={{ fontSize: 14, color: '#8A2D27', fontWeight: 600 }}>
+            Click books or binders on the shelf to select them for deletion ({totalSelected}{' '}
+            selected)
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              type="button"
+              className="zen-btn-secondary"
+              onClick={handleSelectAll}
+              style={{ height: 34, fontSize: 12 }}
+            >
+              {totalSelected === totalItemsOnShelf ? 'Deselect All' : 'Select All'}
+            </button>
+            <button
+              type="button"
+              disabled={totalSelected === 0 || deleting}
+              onClick={handleConfirmDelete}
+              style={{
+                height: 36,
+                padding: '0 18px',
+                borderRadius: 999,
+                border: 'none',
+                background: totalSelected === 0 ? '#D9B6B2' : '#B4433C',
+                color: '#FAF7F2',
+                fontSize: 13,
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                cursor: totalSelected === 0 ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <Trash2 size={14} />
+              <span>
+                {deleting ? 'Deleting...' : `Delete Selected (${totalSelected})`}
+              </span>
+            </button>
+          </div>
+        </motion.div>
+      ) : (
+        <p className="shelf-hint">
+          Hover any binder or book spine to slide it halfway out in 3D &bull; Click a binder to open
+          its sub-genre shelf, or click a book to read
+        </p>
+      )}
 
       {isEmpty ? (
         <div
@@ -211,8 +333,11 @@ export const Bookshelf3D: React.FC<Bookshelf3DProps> = ({
                   binder={binder}
                   bookCount={countBooksRecursive(binder.id, allCategories, allBooks)}
                   subBinderCount={allCategories.filter((c) => c.parentId === binder.id).length}
-                  isAnyHovered={hoveredItemId !== null}
+                  isAnyHovered={!deleteMode && hoveredItemId !== null}
                   isHovered={hoveredItemId === binder.id}
+                  deleteMode={deleteMode}
+                  isSelectedForDelete={selectedBinderIds.includes(binder.id)}
+                  onToggleSelectForDelete={toggleBinderSelect}
                   onHoverStart={() => setHoveredItemId(binder.id)}
                   onHoverEnd={() => setHoveredItemId(null)}
                   onOpenBinder={onOpenBinder}
@@ -223,8 +348,11 @@ export const Bookshelf3D: React.FC<Bookshelf3DProps> = ({
                 <BookSpine3D
                   key={book.id}
                   book={book}
-                  isAnyHovered={hoveredItemId !== null}
+                  isAnyHovered={!deleteMode && hoveredItemId !== null}
                   isHovered={hoveredItemId === book.id}
+                  deleteMode={deleteMode}
+                  isSelectedForDelete={selectedBookIds.includes(book.id)}
+                  onToggleSelectForDelete={toggleBookSelect}
                   onHoverStart={() => setHoveredItemId(book.id)}
                   onHoverEnd={() => setHoveredItemId(null)}
                   onOpenBook={onOpenBook}
@@ -244,8 +372,11 @@ export const Bookshelf3D: React.FC<Bookshelf3DProps> = ({
                   <BookSpine3D
                     key={book.id}
                     book={book}
-                    isAnyHovered={hoveredItemId !== null}
+                    isAnyHovered={!deleteMode && hoveredItemId !== null}
                     isHovered={hoveredItemId === book.id}
+                    deleteMode={deleteMode}
+                    isSelectedForDelete={selectedBookIds.includes(book.id)}
+                    onToggleSelectForDelete={toggleBookSelect}
                     onHoverStart={() => setHoveredItemId(book.id)}
                     onHoverEnd={() => setHoveredItemId(null)}
                     onOpenBook={onOpenBook}
@@ -258,8 +389,11 @@ export const Bookshelf3D: React.FC<Bookshelf3DProps> = ({
                       <BookSpine3D
                         key={book.id}
                         book={book}
-                        isAnyHovered={hoveredItemId !== null}
+                        isAnyHovered={!deleteMode && hoveredItemId !== null}
                         isHovered={hoveredItemId === book.id}
+                        deleteMode={deleteMode}
+                        isSelectedForDelete={selectedBookIds.includes(book.id)}
+                        onToggleSelectForDelete={toggleBookSelect}
                         onHoverStart={() => setHoveredItemId(book.id)}
                         onHoverEnd={() => setHoveredItemId(null)}
                         onOpenBook={onOpenBook}
@@ -272,8 +406,11 @@ export const Bookshelf3D: React.FC<Bookshelf3DProps> = ({
                   <BookSpine3D
                     key={book.id}
                     book={book}
-                    isAnyHovered={hoveredItemId !== null}
+                    isAnyHovered={!deleteMode && hoveredItemId !== null}
                     isHovered={hoveredItemId === book.id}
+                    deleteMode={deleteMode}
+                    isSelectedForDelete={selectedBookIds.includes(book.id)}
+                    onToggleSelectForDelete={toggleBookSelect}
                     onHoverStart={() => setHoveredItemId(book.id)}
                     onHoverEnd={() => setHoveredItemId(null)}
                     onOpenBook={onOpenBook}
