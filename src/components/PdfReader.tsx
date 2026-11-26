@@ -21,10 +21,26 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
   onPageChange,
   externalPageRequest,
 }) => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [currentPage, setCurrentPage] = useState(Math.max(1, initialPage));
+  const [containerWidth, setContainerWidth] = useState<number>(800);
   const [error, setError] = useState<string | null>(null);
+
+  // Track container width so PDF fits phone & desktop screens with exact aspect ratio
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const measure = () => {
+      const w = el.clientWidth;
+      if (w > 0) setContainerWidth(w);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,8 +90,14 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
       try {
         const page = await pdfDoc.getPage(currentPage);
         if (cancelled) return;
-        const dpr = window.devicePixelRatio || 1;
-        const viewport = page.getViewport({ scale: 1.35 * zoom });
+
+        const baseViewport = page.getViewport({ scale: 1 });
+        const padding = containerWidth < 640 ? 12 : 48;
+        const targetCssWidth = Math.max(240, Math.min(containerWidth - padding, 920));
+        const fitScale = (targetCssWidth / baseViewport.width) * zoom;
+
+        const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+        const viewport = page.getViewport({ scale: fitScale });
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
@@ -83,7 +105,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
         canvas.width = Math.floor(viewport.width * dpr);
         canvas.height = Math.floor(viewport.height * dpr);
         canvas.style.width = `${Math.floor(viewport.width)}px`;
-        canvas.style.height = `${Math.floor(viewport.height)}px`;
+        canvas.style.height = 'auto';
 
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         renderTask = page.render({ canvasContext: ctx, viewport });
@@ -101,7 +123,7 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
       cancelled = true;
       renderTask?.cancel();
     };
-  }, [pdfDoc, currentPage, zoom]);
+  }, [pdfDoc, currentPage, zoom, containerWidth]);
 
   if (error) {
     return (
@@ -114,20 +136,16 @@ export const PdfReader: React.FC<PdfReaderProps> = ({
 
   return (
     <div
-      style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'flex-start',
-        padding: '28px 24px',
-        minHeight: 620,
-      }}
+      ref={containerRef}
+      className="pdf-reader-container"
     >
       <canvas
         ref={canvasRef}
         style={{
-          borderRadius: 6,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
-          maxWidth: '100%',
+          display: 'block',
+          borderRadius: 4,
+          boxShadow: '0 6px 20px rgba(0,0,0,0.08)',
+          maxWidth: zoom <= 1 ? '100%' : 'none',
           height: 'auto',
         }}
       />

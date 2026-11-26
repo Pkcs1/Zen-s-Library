@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft,
@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Minus,
   Plus,
+  SlidersHorizontal,
   Trash2,
 } from 'lucide-react';
 import { BookItem, BookmarkItem, ReaderTheme } from '../types/library';
@@ -33,8 +34,10 @@ export const ReaderOverlay: React.FC<ReaderOverlayProps> = ({
 }) => {
   const [theme, setTheme] = useState<ReaderTheme>('cream');
   const [zoom, setZoom] = useState(1);
+  const [showMobileTools, setShowMobileTools] = useState(false);
   const [fileBlob, setFileBlob] = useState<Blob | null>(null);
   const [loadingBlob, setLoadingBlob] = useState(true);
+  const touchStartX = useRef<number | null>(null);
 
   // Page & progress state
   const [currentPage, setCurrentPage] = useState(() => {
@@ -147,28 +150,30 @@ export const ReaderOverlay: React.FC<ReaderOverlayProps> = ({
     >
       {/* Top Reader Toolbar */}
       <div className="reader-topbar">
-        <button className="zen-btn-secondary" onClick={onClose}>
-          <ArrowLeft size={15} />
-          <span>Return to Shelf</span>
+        <button className="zen-btn-secondary reader-back-btn" onClick={onClose}>
+          <ArrowLeft size={16} />
+          <span className="reader-back-label">Return to Shelf</span>
         </button>
 
-        <div style={{ textAlign: 'center' }}>
-          <div
-            style={{
-              fontFamily: 'var(--font-serif)',
-              fontSize: 20,
-              fontWeight: 700,
-              lineHeight: 1.15,
-            }}
-          >
-            {book.title} &mdash; {book.author}
+        <div className="reader-title-block">
+          <div className="reader-book-title">
+            {book.title}
           </div>
-          <div style={{ fontSize: 12, opacity: 0.68 }}>
-            {fileBlob ? book.fileName : activeDemoChapter.title} &bull; {book.format.toUpperCase()}
+          <div className="reader-book-sub">
+            {book.author} &bull; {book.format.toUpperCase()}
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* Mobile Settings Toggle Button */}
+        <button
+          className="zen-btn-secondary reader-mobile-tools-btn"
+          onClick={() => setShowMobileTools((v) => !v)}
+          title="Reader settings"
+        >
+          <SlidersHorizontal size={16} />
+        </button>
+
+        <div className={`reader-controls ${showMobileTools ? 'mobile-open' : ''}`}>
           {/* Zoom / Font controls */}
           <div
             style={{
@@ -273,7 +278,23 @@ export const ReaderOverlay: React.FC<ReaderOverlayProps> = ({
       </div>
 
       {/* Pop-Out Open Book Spread Canvas */}
-      <div className="reader-canvas-area" style={{ perspective: 1600 }}>
+      <div
+        className="reader-canvas-area"
+        style={{ perspective: 1600 }}
+        onTouchStart={(e) => {
+          touchStartX.current = e.touches[0]?.clientX ?? null;
+        }}
+        onTouchEnd={(e) => {
+          if (touchStartX.current === null || zoom > 1.05) return;
+          const endX = e.changedTouches[0]?.clientX ?? touchStartX.current;
+          const dx = endX - touchStartX.current;
+          touchStartX.current = null;
+          if (Math.abs(dx) > 65) {
+            if (dx < 0) handleNext();
+            else handlePrev();
+          }
+        }}
+      >
         <motion.div
           className="reader-paper"
           initial={{ opacity: 0, scale: 0.68, rotateY: -16, y: 40 }}
@@ -429,21 +450,14 @@ export const ReaderOverlay: React.FC<ReaderOverlayProps> = ({
             display: 'inline-flex',
             alignItems: 'center',
             gap: 4,
+            flexShrink: 0,
           }}
         >
           <ChevronLeft size={16} />
           <span>Prev</span>
         </button>
 
-        <div
-          style={{
-            width: 300,
-            height: 6,
-            borderRadius: 999,
-            background: 'rgba(138, 125, 110, 0.24)',
-            overflow: 'hidden',
-          }}
-        >
+        <div className="reader-scrubber-track">
           <div
             style={{
               width: `${progressPercent}%`,
@@ -455,10 +469,10 @@ export const ReaderOverlay: React.FC<ReaderOverlayProps> = ({
           />
         </div>
 
-        <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.78, minWidth: 124 }}>
+        <span className="reader-scrubber-label">
           {fileBlob && book.format === 'pdf'
-            ? `Page ${currentPage} of ${totalPages} (${progressPercent}%)`
-            : `${progressPercent}% read`}
+            ? `${currentPage} / ${totalPages} (${progressPercent}%)`
+            : `${progressPercent}%`}
         </span>
 
         <button
@@ -472,6 +486,7 @@ export const ReaderOverlay: React.FC<ReaderOverlayProps> = ({
             display: 'inline-flex',
             alignItems: 'center',
             gap: 4,
+            flexShrink: 0,
           }}
         >
           <span>Next</span>

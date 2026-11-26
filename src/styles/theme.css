@@ -704,17 +704,86 @@ button {
 }
 
 .reader-topbar {
-  height: 64px;
+  min-height: 64px;
   padding: 0 28px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  position: relative;
+  z-index: 130;
   border-bottom: 1px solid rgba(128, 116, 100, 0.2);
-  background: rgba(250, 247, 242, 0.88);
+  background: rgba(250, 247, 242, 0.92);
   color: #2c2621;
   backdrop-filter: blur(12px);
   transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+}
+
+.reader-title-block {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+.reader-book-title {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reader-book-sub {
+  font-size: 12px;
+  opacity: 0.68;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reader-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.reader-mobile-tools-btn {
+  display: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.pdf-reader-container {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 20px 16px;
+  width: 100%;
+  overflow-x: auto;
+}
+
+.reader-scrubber-track {
+  width: 240px;
+  flex: 1;
+  min-width: 48px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(138, 125, 110, 0.24);
+  overflow: hidden;
+}
+
+.reader-scrubber-label {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.8;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .reader-backdrop.theme-night .reader-topbar {
@@ -726,9 +795,9 @@ button {
 .reader-canvas-area {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 24px 36px 88px;
+  padding: 20px 32px 88px;
   overflow: auto;
   position: relative;
 }
@@ -900,12 +969,49 @@ button {
     display: none;
   }
   .reader-topbar {
+    padding: 8px 12px;
+    min-height: 54px;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .reader-back-btn {
+    height: 36px;
     padding: 0 12px;
-    height: 58px;
+    flex-shrink: 0;
+  }
+  .reader-back-label {
+    display: none;
+  }
+  .reader-book-title {
+    font-size: 16px;
+  }
+  .reader-book-sub {
+    font-size: 11px;
+  }
+  .reader-mobile-tools-btn {
+    display: inline-flex;
+  }
+  .reader-controls {
+    display: none;
+    width: 100%;
+    padding-top: 8px;
+    border-top: 1px solid rgba(128, 116, 100, 0.16);
+    justify-content: space-between;
+    flex-wrap: wrap;
     gap: 8px;
   }
+  .reader-controls.mobile-open {
+    display: flex;
+  }
   .reader-canvas-area {
-    padding: 12px 10px 80px;
+    padding: 8px 6px 82px;
+  }
+  .reader-paper {
+    min-height: auto;
+    border-radius: 8px;
+  }
+  .pdf-reader-container {
+    padding: 8px 4px;
   }
   .reader-spread-grid {
     grid-template-columns: 1fr;
@@ -914,11 +1020,16 @@ button {
     display: none;
   }
   .reader-scrubber {
-    width: calc(100vw - 24px);
-    max-width: 420px;
+    bottom: 12px;
+    width: calc(100vw - 20px);
+    max-width: 440px;
+    height: 46px;
     padding: 0 14px;
     gap: 10px;
     justify-content: space-between;
+  }
+  .reader-scrubber-track {
+    width: auto;
   }
   .modal-card {
     max-height: 92vh;

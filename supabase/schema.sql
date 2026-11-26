@@ -51,7 +51,12 @@ create table if not exists public.bookmarks (
   created_at timestamptz default now()
 );
 
--- Enable Row-Level Security
+-- Enable Row-Level Security & grant authenticated role access
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on table public.categories to authenticated;
+grant select, insert, update, delete on table public.books to authenticated;
+grant select, insert, update, delete on table public.bookmarks to authenticated;
+
 alter table public.categories enable row level security;
 alter table public.books enable row level security;
 alter table public.bookmarks enable row level security;
@@ -78,23 +83,19 @@ values ('books', 'books', false)
 on conflict (id) do nothing;
 
 -- Storage RLS: files are stored under `{user_id}/{book_id}.{ext}`
-create policy "Users upload own book files"
-  on storage.objects for insert
+drop policy if exists "Users upload own book files" on storage.objects;
+drop policy if exists "Users read own book files" on storage.objects;
+drop policy if exists "Users delete own book files" on storage.objects;
+drop policy if exists "Users manage own book files" on storage.objects;
+
+create policy "Users manage own book files"
+  on storage.objects for all
+  to authenticated
+  using (
+    bucket_id = 'books'
+    and auth.uid()::text = (storage.foldername(name))[1]
+  )
   with check (
-    bucket_id = 'books'
-    and auth.uid()::text = (storage.foldername(name))[1]
-  );
-
-create policy "Users read own book files"
-  on storage.objects for select
-  using (
-    bucket_id = 'books'
-    and auth.uid()::text = (storage.foldername(name))[1]
-  );
-
-create policy "Users delete own book files"
-  on storage.objects for delete
-  using (
     bucket_id = 'books'
     and auth.uid()::text = (storage.foldername(name))[1]
   );
