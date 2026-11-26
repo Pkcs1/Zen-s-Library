@@ -514,6 +514,97 @@ button {
   pointer-events: none;
 }
 
+/* 3D Archival Sub-Category Binder */
+.binder-spine-face {
+  position: relative;
+  width: 96px;
+  height: 252px;
+  border-radius: 6px 6px 3px 3px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 10px 20px;
+  overflow: hidden;
+  user-select: none;
+  backface-visibility: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: box-shadow 0.28s ease;
+}
+
+.binder-label-plate {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  padding: 10px 6px;
+  border-radius: 4px;
+  background: #faf5ea;
+  border: 1px solid #d5c7ae;
+  box-shadow: inset 0 1px 2px rgba(44, 38, 33, 0.08);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.binder-label-kicker {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: #c86d51;
+}
+
+.binder-label-name {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: #2c2621;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.binder-count-tag {
+  position: relative;
+  z-index: 2;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(250, 246, 238, 0.16);
+  color: #faf6ee;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.binder-eyelet {
+  position: relative;
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #241e19 0%, #14100d 100%);
+  border: 3px solid #d9bc8c;
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.65),
+    0 1px 2px rgba(255, 255, 255, 0.25);
+}
+
+.binder-box-side {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 100%;
+  width: 44px;
+  border-radius: 0 4px 4px 0;
+  filter: brightness(0.82);
+  border-right: 3px solid rgba(0, 0, 0, 0.18);
+  transform-origin: left center;
+  transform: rotateY(70deg);
+  pointer-events: none;
+}
+
 /* Horizontal Book Stack */
 .book-stack-col {
   display: flex;

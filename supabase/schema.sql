@@ -1,16 +1,21 @@
 -- Zen's Library — Supabase PostgreSQL Schema & Storage RLS Policies
 -- Run this in your Supabase Dashboard -> SQL Editor
 
--- 1. Categories (Racks)
+-- 1. Categories (Racks & Nested Sub-Category Binders)
 create table if not exists public.categories (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete cascade not null,
+  parent_id uuid references public.categories(id) on delete cascade,
   name text not null,
   description text default '',
   accent_color text default '#C86D51',
   sort_order integer default 0,
   created_at timestamptz default now()
 );
+
+-- Safe migration if you already created the categories table earlier:
+alter table public.categories
+  add column if not exists parent_id uuid references public.categories(id) on delete cascade;
 
 -- 2. Books (PDF & EPUB metadata + 3D spine styling + reading progress)
 create table if not exists public.books (

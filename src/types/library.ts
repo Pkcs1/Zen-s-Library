@@ -3,6 +3,7 @@ export type ReaderTheme = 'cream' | 'white' | 'sepia' | 'night';
 
 export interface CategoryRack {
   id: string;
+  parentId?: string | null; // null/undefined = top-level Rack; set = Binder inside a parent Rack
   name: string;
   description: string;
   accentColor: string;

@@ -35,6 +35,7 @@ export const App: React.FC = () => {
 
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [creatingBinderParent, setCreatingBinderParent] = useState<CategoryRack | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
 
@@ -74,6 +75,23 @@ export const App: React.FC = () => {
 
   const selectedCategory = useMemo(
     () => categories.find((c) => c.id === selectedCategoryId) ?? null,
+    [categories, selectedCategoryId]
+  );
+
+  const selectedBreadcrumbs = useMemo(() => {
+    const chain: CategoryRack[] = [];
+    let curr = selectedCategory;
+    const seen = new Set<string>();
+    while (curr && !seen.has(curr.id)) {
+      chain.unshift(curr);
+      seen.add(curr.id);
+      curr = curr.parentId ? categories.find((c) => c.id === curr!.parentId) ?? null : null;
+    }
+    return chain;
+  }, [categories, selectedCategory]);
+
+  const childBindersOfSelected = useMemo(
+    () => categories.filter((c) => c.parentId === selectedCategoryId),
     [categories, selectedCategoryId]
   );
 
@@ -177,18 +195,34 @@ export const App: React.FC = () => {
               categories={filteredCategories}
               books={filteredBooks}
               onSelectCategory={handleSelectCategory}
-              onNewCategoryClick={() => setShowCategoryModal(true)}
+              onNewCategoryClick={() => {
+                setCreatingBinderParent(null);
+                setShowCategoryModal(true);
+              }}
               onResetClick={() => setShowResetModal(true)}
             />
           ) : (
             <Bookshelf3D
               key={`shelf-${selectedCategory.id}`}
               category={selectedCategory}
+              breadcrumbs={selectedBreadcrumbs}
+              childBinders={childBindersOfSelected}
+              allCategories={categories}
+              allBooks={books}
               books={booksInSelectedCategory}
               zoomOrigin={zoomOrigin}
               onBackToRacks={() => setSelectedCategoryId(null)}
+              onSelectBreadcrumb={(id) => {
+                setZoomOrigin(null);
+                setSelectedCategoryId(id);
+              }}
+              onOpenBinder={handleSelectCategory}
               onOpenBook={(book) => setActiveBook(book)}
               onAddBookClick={() => setShowUploadModal(true)}
+              onNewBinderClick={() => {
+                setCreatingBinderParent(selectedCategory);
+                setShowCategoryModal(true);
+              }}
             />
           )}
         </AnimatePresence>
@@ -224,7 +258,11 @@ export const App: React.FC = () => {
         {showCategoryModal && (
           <NewCategoryModal
             nextOrder={categories.length}
-            onClose={() => setShowCategoryModal(false)}
+            parentCategory={creatingBinderParent}
+            onClose={() => {
+              setShowCategoryModal(false);
+              setCreatingBinderParent(null);
+            }}
             onCreate={handleCreateCategory}
           />
         )}

@@ -49,12 +49,31 @@ export const SEED_CATEGORIES: CategoryRack[] = [
     sortOrder: 5,
     createdAt: '2026-01-15T08:00:00Z',
   },
+  // Sub-Category Binders inside Philosophy & Classics
+  {
+    id: 'binder-stoicism',
+    parentId: 'cat-philosophy',
+    name: 'Stoicism',
+    description: 'Marcus Aurelius, Seneca, and Stoic philosophy',
+    accentColor: '#2B463C',
+    sortOrder: 6,
+    createdAt: '2026-01-16T08:00:00Z',
+  },
+  {
+    id: 'binder-dialogues',
+    parentId: 'cat-philosophy',
+    name: 'Greek Classics',
+    description: 'Plato and ancient Athenian dialogues',
+    accentColor: '#7F9C8E',
+    sortOrder: 7,
+    createdAt: '2026-01-17T08:00:00Z',
+  },
 ];
 
 export const SEED_BOOKS: BookItem[] = [
   {
     id: 'book-meditations',
-    categoryId: 'cat-philosophy',
+    categoryId: 'binder-stoicism',
     title: 'Meditations',
     author: 'Marcus Aurelius',
     format: 'epub',
@@ -93,7 +112,7 @@ export const SEED_BOOKS: BookItem[] = [
   },
   {
     id: 'book-republic',
-    categoryId: 'cat-philosophy',
+    categoryId: 'binder-dialogues',
     title: 'The Republic',
     author: 'Plato',
     format: 'pdf',
@@ -123,7 +142,7 @@ export const SEED_BOOKS: BookItem[] = [
   },
   {
     id: 'book-seneca',
-    categoryId: 'cat-philosophy',
+    categoryId: 'binder-stoicism',
     title: 'Seneca Letters',
     author: 'Lucius Annaeus Seneca',
     format: 'epub',

@@ -234,18 +234,28 @@ export const UploadBookModal: React.FC<UploadBookModalProps> = ({
 
                 <div>
                   <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#5A5148', marginBottom: 6, letterSpacing: '0.06em' }}>
-                    CATEGORY RACK
+                    RACK OR BINDER
                   </label>
                   <select
                     className="zen-input"
                     value={categoryId}
                     onChange={(e) => setCategoryId(e.target.value)}
                   >
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
+                    {categories
+                      .filter((c) => !c.parentId)
+                      .map((rack) => {
+                        const childBinders = categories.filter((b) => b.parentId === rack.id);
+                        return (
+                          <React.Fragment key={rack.id}>
+                            <option value={rack.id}>{rack.name}</option>
+                            {childBinders.map((binder) => (
+                              <option key={binder.id} value={binder.id}>
+                                &nbsp;&nbsp;↳ {binder.name} (Binder)
+                              </option>
+                            ))}
+                          </React.Fragment>
+                        );
+                      })}
                   </select>
                 </div>
               </div>

@@ -18,7 +18,13 @@ export const CategoryRackGrid: React.FC<CategoryRackGridProps> = ({
   onNewCategoryClick,
   onResetClick,
 }) => {
+  const topLevelRacks = categories.filter((c) => !c.parentId);
   const totalBooks = books.length;
+
+  const getDescendantIds = (rootId: string): string[] => {
+    const children = categories.filter((c) => c.parentId === rootId);
+    return [rootId, ...children.flatMap((ch) => getDescendantIds(ch.id))];
+  };
 
   return (
     <motion.section
@@ -34,7 +40,7 @@ export const CategoryRackGrid: React.FC<CategoryRackGridProps> = ({
           <div className="zen-kicker">Your Personal Reading Room</div>
           <h1 className="zen-hero-title">Choose a rack to browse</h1>
           <p className="zen-hero-sub">
-            {categories.length} category racks &bull; {totalBooks} books stored &bull; PDF &amp; EPUB ready
+            {topLevelRacks.length} category racks &bull; {totalBooks} books stored &bull; PDF &amp; EPUB ready
           </p>
         </div>
 
@@ -54,7 +60,7 @@ export const CategoryRackGrid: React.FC<CategoryRackGridProps> = ({
         </div>
       </div>
 
-      {categories.length === 0 ? (
+      {topLevelRacks.length === 0 ? (
         <div
           style={{
             padding: '80px 28px',
@@ -84,8 +90,10 @@ export const CategoryRackGrid: React.FC<CategoryRackGridProps> = ({
         </div>
       ) : (
         <div className="rack-grid">
-        {categories.map((cat, idx) => {
-          const catBooks = books.filter((b) => b.categoryId === cat.id);
+        {topLevelRacks.map((cat, idx) => {
+          const allIds = getDescendantIds(cat.id);
+          const binderCount = allIds.length - 1;
+          const catBooks = books.filter((b) => allIds.includes(b.categoryId));
           const previewSpines = catBooks.slice(0, 6);
           const formats = Array.from(new Set(catBooks.map((b) => b.format.toUpperCase()))).join(' & ') || 'Empty Rack';
 
@@ -133,7 +141,8 @@ export const CategoryRackGrid: React.FC<CategoryRackGridProps> = ({
               <h2 className="rack-card-title">{cat.name}</h2>
               <div className="rack-card-footer">
                 <span>
-                  {catBooks.length} {catBooks.length === 1 ? 'book' : 'books'} &bull; {formats}
+                  {catBooks.length} {catBooks.length === 1 ? 'book' : 'books'}
+                  {binderCount > 0 ? ` • ${binderCount} ${binderCount === 1 ? 'binder' : 'binders'}` : ` • ${formats}`}
                 </span>
                 <span className="rack-card-cta">Open Rack &rarr;</span>
               </div>

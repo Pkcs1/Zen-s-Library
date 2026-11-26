@@ -61,6 +61,7 @@ export async function loadLibraryState(): Promise<{
         if (cloudCats && cloudCats.length > 0) {
           const categories: CategoryRack[] = cloudCats.map((c) => ({
             id: c.id,
+            parentId: c.parent_id ?? null,
             name: c.name,
             description: c.description ?? '',
             accentColor: c.accent_color ?? '#C86D51',
@@ -177,6 +178,7 @@ export async function saveCategory(category: CategoryRack): Promise<void> {
       await supabase.from('categories').upsert({
         id: category.id,
         user_id: data.user.id,
+        parent_id: category.parentId ?? null,
         name: category.name,
         description: category.description,
         accent_color: category.accentColor,
